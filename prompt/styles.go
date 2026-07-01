@@ -25,12 +25,17 @@ type Styles struct {
 
 	// Echo styles the answer label rendered after the user responds.
 	Echo lipgloss.Style
+
+	// Invalid styles the hint shown briefly after an unrecognized key is
+	// pressed.
+	Invalid lipgloss.Style
 }
 
 var (
 	colorWarn    = lipgloss.Color("#ffffa0")
 	colorCaution = lipgloss.Color("#ffb347")
 	colorSuccess = lipgloss.Color("#a6e3a1")
+	colorInvalid = lipgloss.Color("#f38ba8")
 )
 
 // NewWarnStyles returns Styles for a warning prompt (yellow).
@@ -41,6 +46,7 @@ func NewWarnStyles() Styles {
 		CursorStyle:     lipgloss.NewStyle().Foreground(colorWarn),
 		CursorTextStyle: lipgloss.NewStyle().Foreground(colorWarn),
 		Echo:            lipgloss.NewStyle().Foreground(colorWarn),
+		Invalid:         lipgloss.NewStyle().Foreground(colorInvalid),
 	}
 }
 
@@ -52,6 +58,7 @@ func NewErrorStyles() Styles {
 		CursorStyle:     lipgloss.NewStyle().Foreground(colorCaution),
 		CursorTextStyle: lipgloss.NewStyle().Foreground(colorCaution),
 		Echo:            lipgloss.NewStyle().Foreground(colorCaution),
+		Invalid:         lipgloss.NewStyle().Foreground(colorInvalid),
 	}
 }
 
@@ -63,12 +70,14 @@ func NewSuccessStyles() Styles {
 		CursorStyle:     lipgloss.NewStyle().Foreground(colorSuccess),
 		CursorTextStyle: lipgloss.NewStyle().Foreground(colorSuccess),
 		Echo:            lipgloss.NewStyle().Foreground(colorSuccess),
+		Invalid:         lipgloss.NewStyle().Foreground(colorInvalid),
 	}
 }
 
 // NewInfoStyles returns Styles for an info prompt (default terminal colors).
 func NewInfoStyles() Styles {
 	return Styles{
-		Icon: lipgloss.NewStyle().Width(4).SetString("i"),
+		Icon:    lipgloss.NewStyle().Width(4).SetString("i"),
+		Invalid: lipgloss.NewStyle().Foreground(colorInvalid),
 	}
 }

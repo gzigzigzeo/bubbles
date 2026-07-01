@@ -2,6 +2,7 @@ package prompt_test
 
 import (
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +27,32 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
 		return nil
 	}
+
 	return cmd()
+}
+
+// subCmds runs cmd and returns the individual sub-commands of the
+// tea.BatchMsg it must produce. This lets a test run each sub-command
+// independently and at its own pace, e.g. to defer running a Tick timer.
+func subCmds(t *testing.T, cmd tea.Cmd) []tea.Cmd {
+	t.Helper()
+	require.NotNil(t, cmd)
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok, "expected a tea.BatchMsg")
+
+	return batch
+}
+
+// findInvalidKeyMsg runs every cmd and returns the InvalidKeyMsg among their
+// results, or nil if none produced one.
+func findInvalidKeyMsg(cmds []tea.Cmd) *prompt.InvalidKeyMsg {
+	for _, c := range cmds {
+		if ik, ok := runCmd(c).(prompt.InvalidKeyMsg); ok {
+			return &ik
+		}
+	}
+
+	return nil
 }
 
 func TestPrompt_UnfocusedIgnoresKeys(t *testing.T) {
@@ -69,7 +95,8 @@ func TestPrompt_UnregisteredKeyProducesNoAnsweredMsg(t *testing.T) {
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("x"))
-	// cmd may be a cursor blink cmd, but must not be AnsweredMsg
+	// cmd now carries the invalid-key flash (see TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg),
+	// but it must never be an AnsweredMsg.
 	if cmd != nil {
 		msg := runCmd(cmd)
 		_, isAnswer := msg.(prompt.AnsweredMsg)
@@ -92,16 +119,15 @@ func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
 	assert.Equal(t, 'y', am.Answer)
 }
 
-func TestPrompt_EnterWithoutDefaultIsNoop(t *testing.T) {
+func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
 	p := prompt.New("Continue?", "y", "n")
+	p.SetInvalidKeyFlashDuration(time.Millisecond)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
-	if cmd != nil {
-		msg := runCmd(cmd)
-		_, isAnswer := msg.(prompt.AnsweredMsg)
-		assert.False(t, isAnswer, "Enter without default must not emit AnsweredMsg")
-	}
+	ik := findInvalidKeyMsg(subCmds(t, cmd))
+	require.NotNil(t, ik, "Enter without a default should be treated as an invalid key")
+	assert.Equal(t, "enter", ik.Key)
 	assert.Nil(t, p.Value())
 }
 
@@ -132,14 +158,13 @@ func TestPrompt_SetAcceptByEnterFalseDisablesEnter(t *testing.T) {
 	p := prompt.New("Continue?", "y", "n")
 	p.SetDefault("y")
 	p.SetAcceptByEnter(false)
+	p.SetInvalidKeyFlashDuration(time.Millisecond)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
-	if cmd != nil {
-		msg := runCmd(cmd)
-		_, isAnswer := msg.(prompt.AnsweredMsg)
-		assert.False(t, isAnswer, "Enter should be ignored when SetAcceptByEnter(false)")
-	}
+	ik := findInvalidKeyMsg(subCmds(t, cmd))
+	require.NotNil(t, ik, "Enter should be treated as invalid when SetAcceptByEnter(false)")
+	assert.Equal(t, "enter", ik.Key)
 	assert.Nil(t, p.Value())
 }
 
@@ -169,4 +194,61 @@ func TestPrompt_Focused(t *testing.T) {
 	assert.True(t, p.Focused())
 	p.Blur()
 	assert.False(t, p.Focused())
+}
+
+func TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg(t *testing.T) {
+	p := prompt.New("Continue?", "y", "n")
+	p.SetInvalidKeyFlashDuration(time.Millisecond)
+	p.Focus() //nolint:errcheck
+
+	_, cmd := p.Update(keyPress("x"))
+	ik := findInvalidKeyMsg(subCmds(t, cmd))
+	require.NotNil(t, ik, "expected InvalidKeyMsg")
+	assert.Equal(t, "x", ik.Key)
+	assert.Equal(t, p, ik.Source)
+	assert.Nil(t, p.Value(), "invalid key must not set an answer")
+}
+
+func TestPrompt_ViewShowsInvalidKeyWithoutHidingHint(t *testing.T) {
+	p := prompt.New("Continue?", "y", "n")
+	p.Focus() //nolint:errcheck
+	p.Update(keyPress("x"))
+
+	view := p.View().Content
+	assert.Contains(t, view, "[y/n]", "the choice hint must stay visible")
+	assert.Contains(t, view, "x", "the invalid key should be shown in place of the cursor")
+}
+
+func TestPrompt_InvalidKeyFlashAutoClears(t *testing.T) {
+	p := prompt.New("Continue?", "y", "n")
+	p.SetInvalidKeyFlashDuration(2 * time.Millisecond)
+	p.Focus() //nolint:errcheck
+
+	_, cmd := p.Update(keyPress("x"))
+	require.Contains(t, p.View().Content, "x")
+
+	cmds := subCmds(t, cmd)
+	clearMsg := runCmd(cmds[len(cmds)-1]) // the tick timer is always last
+	p.Update(clearMsg)
+
+	assert.NotContains(t, p.View().Content, "x", "flash should auto-clear")
+	assert.Contains(t, p.View().Content, "[y/n]", "the choice hint must still be visible")
+}
+
+func TestPrompt_InvalidKeyGenerationGuardsStaleTimer(t *testing.T) {
+	p := prompt.New("Continue?", "y", "n")
+	p.SetInvalidKeyFlashDuration(2 * time.Millisecond)
+	p.Focus() //nolint:errcheck
+
+	_, cmdA := p.Update(keyPress("x"))
+	cmdsA := subCmds(t, cmdA)
+
+	_, cmdB := p.Update(keyPress("z"))
+	require.NotNil(t, cmdB)
+	require.Contains(t, p.View().Content, "z")
+
+	staleClear := runCmd(cmdsA[len(cmdsA)-1]) // A's stale tick timer
+	p.Update(staleClear)
+
+	assert.Contains(t, p.View().Content, "z", "stale timer must not clear a newer flash")
 }

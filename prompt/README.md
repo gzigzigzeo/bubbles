@@ -1,6 +1,6 @@
 # prompt
 
-A configurable inline prompt bubble for [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) that accepts one of a set of single-character keys and echoes the chosen key inline.
+A configurable inline prompt bubble for [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) that accepts one of a set of single-character keys and echoes the chosen key inline. Unrecognized keys briefly flash in place of the cursor instead of being silently ignored.
 
 ![prompt example](./example.gif)
 
@@ -52,6 +52,7 @@ type Styles struct {
     CursorStyle     lipgloss.Style // cursor block style
     CursorTextStyle lipgloss.Style // cursor character style when blinking
     Echo            lipgloss.Style // echoed answer style
+    Invalid         lipgloss.Style // invalid-key hint style
 }
 ```
 
@@ -79,6 +80,8 @@ p.SetStyles(s)
 | `New(question string, keys ...string) *Prompt` | Create a prompt accepting the given keys |
 | `SetStyles(Styles)` | Apply style configuration |
 | `SetDefault(key string)` | Make Enter emit this key as the answer |
+| `SetAcceptByEnter(accept bool)` | Enable/disable Enter triggering the default (on by default) |
+| `SetInvalidKeyFlashDuration(time.Duration)` | How long the invalid-key hint stays visible (default 600ms) |
 | `Init() tea.Cmd` | Starts cursor blinking (satisfies `tea.Model`) |
 | `Focus() tea.Cmd` | Focus, reset answer, start cursor |
 | `Blur()` | Unfocus, stop cursor |
@@ -105,6 +108,33 @@ if ans, ok := p.IsMyAnswer(msg); ok {
     case 'y': // ...
     case 'n': // ...
     }
+}
+```
+
+## InvalidKeyMsg
+
+```go
+type InvalidKeyMsg struct {
+    Source *Prompt // which Prompt rejected the key
+    Key    string  // string representation of the rejected key, e.g. "x", "up"
+}
+```
+
+Pressing a key that isn't one of the accepted keys (and isn't Enter with a
+default set) briefly shows that key in place of the cursor — e.g. typing `x`
+against a `[y/n]` prompt shows `[y/n] x` — without hiding the choice hint.
+It clears itself automatically after `SetInvalidKeyFlashDuration`'s duration
+(600ms by default). This happens automatically in `View()`; `InvalidKeyMsg`
+is only needed if the host app wants to react too, e.g. play a terminal bell
+or log the attempt:
+
+```go
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    if ik, ok := msg.(prompt.InvalidKeyMsg); ok && ik.Source == p {
+        fmt.Print("\a") // bell
+    }
+    _, cmd := p.Update(msg)
+    return m, cmd
 }
 ```
 

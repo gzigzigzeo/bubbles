@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/key"
@@ -11,12 +12,33 @@ import (
 
 var enterKey = key.NewBinding(key.WithKeys("enter"))
 
+// defaultInvalidKeyFlash is how long the invalid-key hint stays visible
+// before automatically clearing, unless overridden with
+// SetInvalidKeyFlashDuration.
+const defaultInvalidKeyFlash = 600 * time.Millisecond
+
 // AnsweredMsg is emitted by Update when the user presses one of the accepted
 // keys. Source identifies which Prompt sent the answer so a parent with
 // multiple prompts can dispatch by identity.
 type AnsweredMsg struct {
 	Source *Prompt
 	Answer rune // the key rune that was pressed, e.g. 'y' or 'n'
+}
+
+// InvalidKeyMsg is emitted by Update when the user presses a key that is not
+// one of the accepted keys (and not Enter with a default set). Prompt also
+// shows a brief inline hint itself, so most callers can ignore this message;
+// it exists for host apps that want to react too, e.g. a terminal bell.
+type InvalidKeyMsg struct {
+	Source *Prompt
+	Key    string // string representation of the rejected key, e.g. "x", "up"
+}
+
+// invalidKeyClearedMsg is sent by a timer started when an invalid key is
+// pressed. gen guards against a stale timer clearing a newer flash.
+type invalidKeyClearedMsg struct {
+	source *Prompt
+	gen    int
 }
 
 // Prompt is a configurable inline prompt that accepts one of the provided
@@ -34,6 +56,10 @@ type Prompt struct {
 	focused     bool
 	styles      Styles
 
+	invalidKey       string        // non-empty while the invalid-key flash is showing
+	invalidGen       int           // guards stale clear-timers after a newer invalid key
+	invalidFlashTime time.Duration // how long the invalid-key flash stays visible
+
 	// Cursor is the blinking cursor model. It is exported so callers can
 	// configure Cursor.SetChar or other cursor options.
 	Cursor cursor.Model
@@ -48,10 +74,11 @@ func New(question string, keys ...string) *Prompt {
 	}
 
 	return &Prompt{
-		question: question,
-		keys:     keys,
-		bindings: bindings,
-		Cursor:   cursor.New(),
+		question:         question,
+		keys:             keys,
+		bindings:         bindings,
+		invalidFlashTime: defaultInvalidKeyFlash,
+		Cursor:           cursor.New(),
 	}
 }
 
@@ -79,6 +106,12 @@ func (p *Prompt) SetAcceptByEnter(accept bool) {
 	p.rejectEnter = !accept
 }
 
+// SetInvalidKeyFlashDuration overrides how long the invalid-key hint stays
+// visible before automatically clearing. The default is 600ms.
+func (p *Prompt) SetInvalidKeyFlashDuration(d time.Duration) {
+	p.invalidFlashTime = d
+}
+
 // Init starts cursor blinking without changing focus or answer state.
 // Call this from your tea.Model Init to satisfy the tea.Model interface.
 func (p *Prompt) Init() tea.Cmd {
@@ -89,6 +122,8 @@ func (p *Prompt) Init() tea.Cmd {
 func (p *Prompt) Focus() tea.Cmd {
 	p.focused = true
 	p.answer = nil
+	p.invalidKey = ""
+	p.invalidGen++
 	p.Cursor.SetChar(" ")
 	return p.Cursor.Focus()
 }
@@ -96,6 +131,8 @@ func (p *Prompt) Focus() tea.Cmd {
 // Blur removes focus and stops cursor blinking.
 func (p *Prompt) Blur() {
 	p.focused = false
+	p.invalidKey = ""
+	p.invalidGen++
 	p.Cursor.Blur()
 }
 
@@ -124,7 +161,14 @@ func (p *Prompt) IsMyAnswer(msg tea.Msg) (rune, bool) {
 
 // Update handles messages when focused: forwards to the cursor model for blink
 // animation and checks whether the key pressed is one of the accepted keys.
+// Unrecognized keys trigger a brief inline "invalid" flash and an
+// InvalidKeyMsg instead of being silently ignored.
 func (p *Prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cm, ok := msg.(invalidKeyClearedMsg); ok {
+		p.handleInvalidKeyCleared(cm)
+		return p, nil
+	}
+
 	if !p.focused {
 		return p, nil
 	}
@@ -132,22 +176,73 @@ func (p *Prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newCur, curCmd := p.Cursor.Update(msg)
 	p.Cursor = newCur
 
-	if km, ok := msg.(tea.KeyMsg); ok {
-		for i, b := range p.bindings {
-			if key.Matches(km, b) {
-				r := []rune(p.keys[i])[0]
-				p.answer = &r
-				return p, func() tea.Msg { return AnsweredMsg{Source: p, Answer: r} }
-			}
-		}
-		if !p.rejectEnter && p.defaultKey != 0 && key.Matches(km, enterKey) {
-			r := p.defaultKey
-			p.answer = &r
-			return p, func() tea.Msg { return AnsweredMsg{Source: p, Answer: r} }
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return p, curCmd
+	}
+
+	return p, p.handleKeyPress(km, curCmd)
+}
+
+// handleInvalidKeyCleared clears the invalid-key flash if cm still matches
+// the current generation, i.e. no newer invalid key has been pressed since
+// this clear timer was started.
+func (p *Prompt) handleInvalidKeyCleared(cm invalidKeyClearedMsg) {
+	if cm.source == p && cm.gen == p.invalidGen {
+		p.invalidKey = ""
+	}
+}
+
+// handleKeyPress answers the prompt if km matches an accepted key or the
+// default-Enter binding, otherwise flags km as an invalid key. curCmd is the
+// cursor's own command for this message, preserved in either outcome.
+func (p *Prompt) handleKeyPress(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
+	if r, ok := p.matchedKey(km); ok {
+		return p.accept(r)
+	}
+
+	if !p.rejectEnter && p.defaultKey != 0 && key.Matches(km, enterKey) {
+		return p.accept(p.defaultKey)
+	}
+
+	return p.flagInvalid(km, curCmd)
+}
+
+// matchedKey reports the rune bound to km among the accepted keys, if any.
+func (p *Prompt) matchedKey(km tea.KeyMsg) (rune, bool) {
+	for i, b := range p.bindings {
+		if key.Matches(km, b) {
+			return []rune(p.keys[i])[0], true
 		}
 	}
 
-	return p, curCmd
+	return 0, false
+}
+
+// accept records r as the answer, clears any invalid-key flash, and emits
+// AnsweredMsg.
+func (p *Prompt) accept(r rune) tea.Cmd {
+	p.answer = &r
+	p.invalidKey = ""
+
+	return func() tea.Msg { return AnsweredMsg{Source: p, Answer: r} }
+}
+
+// flagInvalid shows km as a brief invalid-key flash in place of the cursor,
+// schedules it to clear itself after invalidFlashTime, and emits
+// InvalidKeyMsg.
+func (p *Prompt) flagInvalid(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
+	p.invalidGen++
+	gen := p.invalidGen
+	p.invalidKey = km.String()
+
+	return tea.Batch(
+		curCmd,
+		func() tea.Msg { return InvalidKeyMsg{Source: p, Key: km.String()} },
+		tea.Tick(p.invalidFlashTime, func(time.Time) tea.Msg {
+			return invalidKeyClearedMsg{source: p, gen: gen}
+		}),
+	)
 }
 
 // View renders the prompt: icon, question text with auto-generated choice hint,
@@ -160,8 +255,12 @@ func (p *Prompt) View() tea.View {
 		rawQuestion = p.question + " " + p.styles.Label.Render(p.choiceHint()+":") +
 			p.styles.Echo.Render(" "+string(*p.answer))
 	case p.focused:
+		marker := p.Cursor.View()
+		if p.invalidKey != "" {
+			marker = p.styles.Invalid.Render(p.invalidKey)
+		}
 		rawQuestion = p.question + " " + p.styles.Label.Render(p.choiceHint()) +
-			" " + p.Cursor.View()
+			" " + marker
 	default:
 		rawQuestion = p.question + " " + p.styles.Label.Render(p.choiceHint())
 	}
@@ -182,6 +281,7 @@ func (p *Prompt) View() tea.View {
 // The default key (if any) is shown in upper case.
 func (p *Prompt) choiceHint() string {
 	parts := make([]string, len(p.keys))
+
 	for i, k := range p.keys {
 		runes := []rune(k)
 		if len(runes) > 0 && p.defaultKey != 0 && runes[0] == p.defaultKey {
@@ -190,5 +290,6 @@ func (p *Prompt) choiceHint() string {
 			parts[i] = k
 		}
 	}
+
 	return "[" + strings.Join(parts, "/") + "]"
 }

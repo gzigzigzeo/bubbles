@@ -72,16 +72,20 @@ func (m model) Init() tea.Cmd {
 	return m.steps[0].Focus()
 }
 
-// Update handles messages for the active step, advancing on answer.
+// Update handles messages for the active step, advancing on answer. Once all
+// steps are answered, any further keypress exits.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.current >= len(m.steps) {
-		return m, tea.Quit
+		if _, ok := msg.(tea.KeyPressMsg); ok {
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 	p := m.steps[m.current]
 	if _, ok := p.IsMyAnswer(msg); ok {
 		m.current++
 		if m.current >= len(m.steps) {
-			return m, tea.Quit
+			return m, nil
 		}
 		return m, m.steps[m.current].Focus()
 	}
