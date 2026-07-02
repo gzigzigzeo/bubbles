@@ -14,11 +14,11 @@ go get github.com/gzigzigzeo/bubbles/prompt
 
 ```go
 // Create a y/n prompt.
-p := prompt.New("Deploy now? (y/n)", "y", "n")
+p := prompt.New("Deploy now? (y/n)", 'y', 'n')
 p.SetStyles(prompt.NewSuccessStyles())
 
 // Optionally make Enter accept a specific key.
-p.SetDefault("y")
+p.SetDefault('y')
 
 // In your model's Init:
 func (m Model) Init() tea.Cmd {
@@ -77,9 +77,9 @@ p.SetStyles(s)
 
 | Method | Description |
 |--------|-------------|
-| `New(question string, keys ...string) *Prompt` | Create a prompt accepting the given keys |
+| `New(question string, keys ...rune) *Prompt` | Create a prompt accepting the given keys |
 | `SetStyles(Styles)` | Apply style configuration |
-| `SetDefault(key string)` | Make Enter emit this key as the answer |
+| `SetDefault(key rune)` | Make Enter emit this key as the answer |
 | `SetAcceptByEnter(accept bool)` | Enable/disable Enter triggering the default (on by default) |
 | `SetInvalidKeyFlashDuration(time.Duration)` | How long the invalid-key hint stays visible (default 600ms) |
 | `Init() tea.Cmd` | Starts cursor blinking (satisfies `tea.Model`) |
@@ -122,7 +122,7 @@ type InvalidKeyMsg struct {
 
 Pressing a key that isn't one of the accepted keys (and isn't Enter with a
 default set) briefly shows that key in place of the cursor — e.g. typing `x`
-against a `[y/n]` prompt shows `[y/n] x` — without hiding the choice hint.
+against a `[y/n]` prompt shows `[y/n]: x` — without hiding the choice hint.
 It clears itself automatically after `SetInvalidKeyFlashDuration`'s duration
 (600ms by default). This happens automatically in `View()`; `InvalidKeyMsg`
 is only needed if the host app wants to react too, e.g. play a terminal bell

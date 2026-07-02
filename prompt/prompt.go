@@ -48,7 +48,7 @@ type invalidKeyClearedMsg struct {
 // whether Enter triggers that default.
 type Prompt struct {
 	question    string
-	keys        []string
+	keys        []rune
 	bindings    []key.Binding
 	defaultKey  rune // zero means no default
 	rejectEnter bool // when true Enter is ignored even if defaultKey is set
@@ -66,11 +66,11 @@ type Prompt struct {
 }
 
 // New creates a Prompt that accepts any of the given single-character keys.
-// Example: New("Continue?", "y", "n")
-func New(question string, keys ...string) *Prompt {
+// Example: New("Continue?", 'y', 'n')
+func New(question string, keys ...rune) *Prompt {
 	bindings := make([]key.Binding, len(keys))
 	for i, k := range keys {
-		bindings[i] = key.NewBinding(key.WithKeys(k))
+		bindings[i] = key.NewBinding(key.WithKeys(string(k)))
 	}
 
 	return &Prompt{
@@ -93,11 +93,8 @@ func (p *Prompt) SetStyles(s Styles) {
 // is set and Enter acceptance is enabled, pressing Enter emits AnsweredMsg with
 // that rune as if the user had pressed it directly. The default key is shown
 // in upper case inside the choice hint (e.g. [Y/n]).
-func (p *Prompt) SetDefault(k string) {
-	runes := []rune(k)
-	if len(runes) > 0 {
-		p.defaultKey = runes[0]
-	}
+func (p *Prompt) SetDefault(k rune) {
+	p.defaultKey = k
 }
 
 // SetAcceptByEnter controls whether the Enter key triggers the default answer.
@@ -212,7 +209,7 @@ func (p *Prompt) handleKeyPress(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
 func (p *Prompt) matchedKey(km tea.KeyMsg) (rune, bool) {
 	for i, b := range p.bindings {
 		if key.Matches(km, b) {
-			return []rune(p.keys[i])[0], true
+			return p.keys[i], true
 		}
 	}
 
@@ -248,21 +245,17 @@ func (p *Prompt) flagInvalid(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
 // View renders the prompt: icon, question text with auto-generated choice hint,
 // and either a blinking cursor (while waiting) or the echoed answer rune.
 func (p *Prompt) View() tea.View {
-	var rawQuestion string
+	rawQuestion := p.question + " " + p.styles.Label.Render(p.choiceHint())
 
 	switch {
 	case p.answer != nil:
-		rawQuestion = p.question + " " + p.styles.Label.Render(p.choiceHint()+":") +
-			p.styles.Echo.Render(" "+string(*p.answer))
+		rawQuestion = rawQuestion + " " + p.styles.Echo.Render(" "+string(*p.answer))
 	case p.focused:
 		marker := p.Cursor.View()
 		if p.invalidKey != "" {
 			marker = p.styles.Invalid.Render(p.invalidKey)
 		}
-		rawQuestion = p.question + " " + p.styles.Label.Render(p.choiceHint()) +
-			" " + marker
-	default:
-		rawQuestion = p.question + " " + p.styles.Label.Render(p.choiceHint())
+		rawQuestion = rawQuestion + " " + marker
 	}
 
 	iconCol := p.styles.Icon.Render()
@@ -283,13 +276,12 @@ func (p *Prompt) choiceHint() string {
 	parts := make([]string, len(p.keys))
 
 	for i, k := range p.keys {
-		runes := []rune(k)
-		if len(runes) > 0 && p.defaultKey != 0 && runes[0] == p.defaultKey {
-			parts[i] = strings.ToUpper(k)
+		if p.defaultKey != 0 && k == p.defaultKey {
+			parts[i] = strings.ToUpper(string(k))
 		} else {
-			parts[i] = k
+			parts[i] = string(k)
 		}
 	}
 
-	return "[" + strings.Join(parts, "/") + "]"
+	return "[" + strings.Join(parts, "/") + "]:"
 }

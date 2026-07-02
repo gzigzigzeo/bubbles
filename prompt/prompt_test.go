@@ -56,14 +56,14 @@ func findInvalidKeyMsg(cmds []tea.Cmd) *prompt.InvalidKeyMsg {
 }
 
 func TestPrompt_UnfocusedIgnoresKeys(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	_, cmd := p.Update(keyPress("y"))
 	assert.Nil(t, cmd, "unfocused prompt should produce no command")
 	assert.Nil(t, p.Value(), "unfocused prompt should have no answer")
 }
 
 func TestPrompt_FocusResetsAnswer(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 	p.Update(keyPress("y"))
 
@@ -73,7 +73,7 @@ func TestPrompt_FocusResetsAnswer(t *testing.T) {
 }
 
 func TestPrompt_RegisteredKeyEmitsAnsweredMsg(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("y"))
@@ -91,7 +91,7 @@ func TestPrompt_RegisteredKeyEmitsAnsweredMsg(t *testing.T) {
 }
 
 func TestPrompt_UnregisteredKeyProducesNoAnsweredMsg(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("x"))
@@ -106,8 +106,8 @@ func TestPrompt_UnregisteredKeyProducesNoAnsweredMsg(t *testing.T) {
 }
 
 func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
-	p.SetDefault("y")
+	p := prompt.New("Continue?", 'y', 'n')
+	p.SetDefault('y')
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
@@ -120,7 +120,7 @@ func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
 }
 
 func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.SetInvalidKeyFlashDuration(time.Millisecond)
 	p.Focus() //nolint:errcheck
 
@@ -132,8 +132,8 @@ func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
 }
 
 func TestPrompt_IsMyAnswer(t *testing.T) {
-	p1 := prompt.New("First?", "y", "n")
-	p2 := prompt.New("Second?", "y", "n")
+	p1 := prompt.New("First?", 'y', 'n')
+	p2 := prompt.New("Second?", 'y', 'n')
 	p1.Focus() //nolint:errcheck
 
 	_, cmd := p1.Update(keyPress("y"))
@@ -148,15 +148,15 @@ func TestPrompt_IsMyAnswer(t *testing.T) {
 }
 
 func TestPrompt_IsMyAnswerReturnsFalseForOtherMsgs(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	r, ok := p.IsMyAnswer(keyPress("y"))
 	assert.False(t, ok)
 	assert.Equal(t, rune(0), r)
 }
 
 func TestPrompt_SetAcceptByEnterFalseDisablesEnter(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
-	p.SetDefault("y")
+	p := prompt.New("Continue?", 'y', 'n')
+	p.SetDefault('y')
 	p.SetAcceptByEnter(false)
 	p.SetInvalidKeyFlashDuration(time.Millisecond)
 	p.Focus() //nolint:errcheck
@@ -169,8 +169,8 @@ func TestPrompt_SetAcceptByEnterFalseDisablesEnter(t *testing.T) {
 }
 
 func TestPrompt_ViewContainsDefaultHint(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
-	p.SetDefault("y")
+	p := prompt.New("Continue?", 'y', 'n')
+	p.SetDefault('y')
 	p.Focus() //nolint:errcheck
 
 	view := p.View().Content
@@ -179,7 +179,7 @@ func TestPrompt_ViewContainsDefaultHint(t *testing.T) {
 }
 
 func TestPrompt_ViewShowsEchoAfterAnswer(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 	p.Update(keyPress("n"))
 
@@ -188,7 +188,7 @@ func TestPrompt_ViewShowsEchoAfterAnswer(t *testing.T) {
 }
 
 func TestPrompt_Focused(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	assert.False(t, p.Focused())
 	p.Focus() //nolint:errcheck
 	assert.True(t, p.Focused())
@@ -197,7 +197,7 @@ func TestPrompt_Focused(t *testing.T) {
 }
 
 func TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.SetInvalidKeyFlashDuration(time.Millisecond)
 	p.Focus() //nolint:errcheck
 
@@ -210,7 +210,7 @@ func TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg(t *testing.T) {
 }
 
 func TestPrompt_ViewShowsInvalidKeyWithoutHidingHint(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 	p.Update(keyPress("x"))
 
@@ -220,7 +220,7 @@ func TestPrompt_ViewShowsInvalidKeyWithoutHidingHint(t *testing.T) {
 }
 
 func TestPrompt_InvalidKeyFlashAutoClears(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.SetInvalidKeyFlashDuration(2 * time.Millisecond)
 	p.Focus() //nolint:errcheck
 
@@ -236,7 +236,7 @@ func TestPrompt_InvalidKeyFlashAutoClears(t *testing.T) {
 }
 
 func TestPrompt_InvalidKeyGenerationGuardsStaleTimer(t *testing.T) {
-	p := prompt.New("Continue?", "y", "n")
+	p := prompt.New("Continue?", 'y', 'n')
 	p.SetInvalidKeyFlashDuration(2 * time.Millisecond)
 	p.Focus() //nolint:errcheck
 

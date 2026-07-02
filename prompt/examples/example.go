@@ -25,12 +25,12 @@ type model struct {
 func makeSteps() []*prompt.Prompt {
 	container := lipgloss.NewStyle().Width(containerWidth).MarginBottom(1)
 
-	build := func(q string, s prompt.Styles, def string, keys ...string) *prompt.Prompt {
+	build := func(q string, s prompt.Styles, def rune, keys ...rune) *prompt.Prompt {
 		s.Container = container
 		p := prompt.New(q, keys...)
 		s.Container = s.Container.Margin(1, 0)
 		p.SetStyles(s)
-		if def != "" {
+		if def != 0 {
 			p.SetDefault(def)
 		}
 		return p
@@ -38,27 +38,27 @@ func makeSteps() []*prompt.Prompt {
 
 	errorPrompt := build(
 		"This is an error prompt. Do you like it?",
-		prompt.NewErrorStyles(), "", "y", "n",
+		prompt.NewErrorStyles(), 0, 'y', 'n',
 	)
 	errorPrompt.SetAcceptByEnter(false)
 
 	return []*prompt.Prompt{
 		build(
 			"This is a warning prompt. Do you like it?",
-			prompt.NewWarnStyles(), "", "y", "n",
+			prompt.NewWarnStyles(), 0, 'y', 'n',
 		),
 		errorPrompt,
 		build(
 			"This is a long success prompt. The green color indicates a safe or "+
 				"completed action where confirming will trigger a positive outcome "+
 				"with no irreversible side effects. Do you like it?",
-			prompt.NewSuccessStyles(), "Y", "Y", "n",
+			prompt.NewSuccessStyles(), 'Y', 'Y', 'n',
 		),
 		build(
 			"This is an info prompt. The neutral color scheme suits questions that "+
 				"are neither dangerous nor particularly positive, simply requiring "+
 				"a decision from you.",
-			prompt.NewInfoStyles(), "N", "y", "N",
+			prompt.NewInfoStyles(), 'N', 'y', 'N',
 		),
 	}
 }
