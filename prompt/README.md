@@ -12,13 +12,13 @@ go get github.com/gzigzigzeo/bubbles/prompt
 
 ## Quick start
 
-```go
-// Create a y/n prompt.
-p := prompt.New("Deploy now? (y/n)", 'y', 'n')
-p.SetStyles(prompt.NewSuccessStyles())
+The common case — a plain yes/no confirmation:
 
-// Optionally make Enter accept a specific key.
-p.SetDefault('y')
+```go
+p, err := prompt.New("Deploy now?",
+    prompt.WithYesNoDefaultYes(),
+    prompt.WithSuccessStyles(),
+)
 
 // In your model's Init:
 func (m Model) Init() tea.Cmd {
@@ -27,10 +27,11 @@ func (m Model) Init() tea.Cmd {
 
 // In your model's Update:
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-    if ans, ok := p.IsMyAnswer(msg); ok {
-        if ans == 'y' {
-            // user confirmed
-        }
+    switch msg.(type) {
+    case prompt.YesMsg:
+        // user confirmed
+    case prompt.NoMsg:
+        // user declined
     }
     _, cmd := p.Update(msg)
     return m, cmd
@@ -41,6 +42,21 @@ func (m Model) View() string {
     return p.View().Content
 }
 ```
+
+For anything other than yes/no, `WithOption` registers one key at a time
+with its own message:
+
+```go
+p, err := prompt.New("Overwrite, skip, or abort?",
+    prompt.WithOption('o', OverwriteMsg{}),
+    prompt.WithOption('s', SkipMsg{}),
+    prompt.WithOption('a', AbortMsg{}),
+)
+```
+
+`msg` must be non-nil — `New` returns an error if any registered key has a
+nil `Msg`, if two options register the same key, or if `WithDefault` names a
+key that wasn't registered.
 
 ## Styles
 
@@ -77,11 +93,18 @@ p.SetStyles(s)
 
 | Method | Description |
 |--------|-------------|
-| `New(question string, keys ...rune) *Prompt` | Create a prompt accepting the given keys |
-| `SetStyles(Styles)` | Apply style configuration |
-| `SetDefault(key rune)` | Make Enter emit this key as the answer |
-| `SetAcceptByEnter(accept bool)` | Enable/disable Enter triggering the default (on by default) |
-| `SetInvalidKeyFlashDuration(time.Duration)` | How long the invalid-key hint stays visible (default 600ms) |
+| `New(question string, opts ...Option) (*PromptModel, error)` | Create a prompt from the given `Option`s; errors on a duplicate key, a nil `Msg`, or an unregistered default key |
+| `WithYesNo()` | Registers `'y'` (`YesMsg`) and `'n'` (`NoMsg`), no default |
+| `WithYesNoDefaultYes()` | Like `WithYesNo`, but registers `'Y'` (uppercase, the default) instead of `'y'` |
+| `WithYesNoDefaultNo()` | Like `WithYesNo`, but registers `'N'` (uppercase, the default) instead of `'n'` |
+| `WithOption(key rune, msg tea.Msg)` | Register one key with its own message (`msg` must be non-nil) |
+| `WithDefault(key rune)` | Make Enter emit this key as the answer (general-purpose; must name an already-registered key) |
+| `WithStyles(Styles)` | Apply style configuration at construction |
+| `WithWarnStyles()` / `WithErrorStyles()` / `WithSuccessStyles()` / `WithInfoStyles()` | Shorthand for `WithStyles(NewXStyles())` |
+| `WithAcceptByEnter(accept bool)` | Enable/disable Enter triggering the default (on by default) |
+| `WithInvalidKeyDuration(time.Duration)` | How long the invalid-key hint stays visible (default 600ms) |
+| `WithCursor(cursor.Model)` | Seed the initial cursor instead of `cursor.New()` |
+| `SetStyles(Styles)` | Apply style configuration at runtime (e.g. switching themes on a focused prompt) |
 | `Init() tea.Cmd` | Starts cursor blinking (satisfies `tea.Model`) |
 | `Focus() tea.Cmd` | Focus, reset answer, start cursor |
 | `Blur()` | Unfocus, stop cursor |
@@ -93,50 +116,51 @@ p.SetStyles(s)
 
 ## AnsweredMsg
 
+Every direct key press emits exactly the `Msg` it was registered with via
+`WithOption`/`WithYesNo` (`YesMsg`, `NoMsg`, or your own type) — never
+`AnsweredMsg`. `AnsweredMsg` is emitted **only** when Enter triggers the
+default answer (`WithDefault`/`WithYesNoDefaultYes`/`WithYesNoDefaultNo` +
+`WithAcceptByEnter(true)`, the default), regardless of that key's registered
+`Msg`:
+
 ```go
 type AnsweredMsg struct {
-    Source *Prompt // which Prompt answered
-    Answer rune    // key rune that was pressed, e.g. 'y'
+    Source *PromptModel // which prompt answered
+    Answer rune    // key rune that was pressed, e.g. 'Y'
 }
 ```
 
-Use `IsMyAnswer` instead of a raw type assertion to avoid comparing Sources manually:
+Use `IsMyAnswer` to dispatch on that Enter/default path without comparing
+Sources manually:
 
 ```go
 if ans, ok := p.IsMyAnswer(msg); ok {
     switch ans {
-    case 'y': // ...
-    case 'n': // ...
+    case 'Y': // ...
+    case 'N': // ...
     }
 }
 ```
 
-## InvalidKeyMsg
+## YesMsg / NoMsg
+
+Emitted by a prompt built with `WithYesNo`, `WithYesNoDefaultYes`, or
+`WithYesNoDefaultNo` when the user presses the yes/no key directly (see
+`AnsweredMsg` above for the Enter-triggered-default exception):
 
 ```go
-type InvalidKeyMsg struct {
-    Source *Prompt // which Prompt rejected the key
-    Key    string  // string representation of the rejected key, e.g. "x", "up"
-}
+type YesMsg struct{}
+type NoMsg  struct{}
 ```
+
+## Invalid keys
 
 Pressing a key that isn't one of the accepted keys (and isn't Enter with a
 default set) briefly shows that key in place of the cursor — e.g. typing `x`
 against a `[y/n]` prompt shows `[y/n]: x` — without hiding the choice hint.
-It clears itself automatically after `SetInvalidKeyFlashDuration`'s duration
-(600ms by default). This happens automatically in `View()`; `InvalidKeyMsg`
-is only needed if the host app wants to react too, e.g. play a terminal bell
-or log the attempt:
-
-```go
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-    if ik, ok := msg.(prompt.InvalidKeyMsg); ok && ik.Source == p {
-        fmt.Print("\a") // bell
-    }
-    _, cmd := p.Update(msg)
-    return m, cmd
-}
-```
+It clears itself automatically after `WithInvalidKeyDuration`'s duration
+(600ms by default). This happens automatically in `View()`; no action is
+required from the host app.
 
 ---
 

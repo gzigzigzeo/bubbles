@@ -50,6 +50,10 @@ func NewWarnStyles() Styles {
 	}
 }
 
+// WithWarnStyles applies the warning (yellow) style preset. Equivalent to
+// WithStyles(NewWarnStyles()).
+func WithWarnStyles() Option { return WithStyles(NewWarnStyles()) }
+
 // NewErrorStyles returns Styles for an error prompt (orange).
 func NewErrorStyles() Styles {
 	return Styles{
@@ -61,6 +65,10 @@ func NewErrorStyles() Styles {
 		Invalid:         lipgloss.NewStyle().Foreground(colorInvalid),
 	}
 }
+
+// WithErrorStyles applies the error (orange) style preset. Equivalent to
+// WithStyles(NewErrorStyles()).
+func WithErrorStyles() Option { return WithStyles(NewErrorStyles()) }
 
 // NewSuccessStyles returns Styles for a success prompt (green).
 func NewSuccessStyles() Styles {
@@ -74,6 +82,10 @@ func NewSuccessStyles() Styles {
 	}
 }
 
+// WithSuccessStyles applies the success (green) style preset. Equivalent to
+// WithStyles(NewSuccessStyles()).
+func WithSuccessStyles() Option { return WithStyles(NewSuccessStyles()) }
+
 // NewInfoStyles returns Styles for an info prompt (default terminal colors).
 func NewInfoStyles() Styles {
 	return Styles{
@@ -81,3 +93,7 @@ func NewInfoStyles() Styles {
 		Invalid: lipgloss.NewStyle().Foreground(colorInvalid),
 	}
 }
+
+// WithInfoStyles applies the info (neutral) style preset. Equivalent to
+// WithStyles(NewInfoStyles()).
+func WithInfoStyles() Option { return WithStyles(NewInfoStyles()) }

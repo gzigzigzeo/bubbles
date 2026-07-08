@@ -17,49 +17,44 @@ import (
 const containerWidth = 60
 
 type model struct {
-	steps   []*prompt.Prompt
+	steps   []*prompt.PromptModel
 	current int
 }
 
-// makeSteps returns the four standard style prompts in order.
-func makeSteps() []*prompt.Prompt {
-	container := lipgloss.NewStyle().Width(containerWidth).MarginBottom(1)
+// buildPrompt constructs one step: yesNoOpt picks the key/default shape
+// (WithYesNo, WithYesNoDefaultYes, or WithYesNoDefaultNo), s supplies the
+// color preset, and extra carries anything else (e.g. WithAcceptByEnter).
+func buildPrompt(q string, s prompt.Styles, yesNoOpt prompt.Option, extra ...prompt.Option) *prompt.PromptModel {
+	s.Container = lipgloss.NewStyle().Width(containerWidth).MarginBottom(1).Margin(1, 0)
+	opts := append([]prompt.Option{yesNoOpt, prompt.WithStyles(s)}, extra...)
 
-	build := func(q string, s prompt.Styles, def rune, keys ...rune) *prompt.Prompt {
-		s.Container = container
-		p := prompt.New(q, keys...)
-		s.Container = s.Container.Margin(1, 0)
-		p.SetStyles(s)
-		if def != 0 {
-			p.SetDefault(def)
-		}
-		return p
+	p, err := prompt.New(q, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return p
+}
 
-	errorPrompt := build(
+const successQuestion = "This is a long success prompt. The green color indicates a safe or " +
+	"completed action where confirming will trigger a positive outcome " +
+	"with no irreversible side effects. Do you like it?"
+
+const infoQuestion = "This is an info prompt. The neutral color scheme suits questions that " +
+	"are neither dangerous nor particularly positive, simply requiring " +
+	"a decision from you."
+
+// makeSteps returns the four standard style prompts in order.
+func makeSteps() []*prompt.PromptModel {
+	errorPrompt := buildPrompt(
 		"This is an error prompt. Do you like it?",
-		prompt.NewErrorStyles(), 0, 'y', 'n',
+		prompt.NewErrorStyles(), prompt.WithYesNo(), prompt.WithAcceptByEnter(false),
 	)
-	errorPrompt.SetAcceptByEnter(false)
 
-	return []*prompt.Prompt{
-		build(
-			"This is a warning prompt. Do you like it?",
-			prompt.NewWarnStyles(), 0, 'y', 'n',
-		),
+	return []*prompt.PromptModel{
+		buildPrompt("This is a warning prompt. Do you like it?", prompt.NewWarnStyles(), prompt.WithYesNo()),
 		errorPrompt,
-		build(
-			"This is a long success prompt. The green color indicates a safe or "+
-				"completed action where confirming will trigger a positive outcome "+
-				"with no irreversible side effects. Do you like it?",
-			prompt.NewSuccessStyles(), 'Y', 'Y', 'n',
-		),
-		build(
-			"This is an info prompt. The neutral color scheme suits questions that "+
-				"are neither dangerous nor particularly positive, simply requiring "+
-				"a decision from you.",
-			prompt.NewInfoStyles(), 'N', 'y', 'N',
-		),
+		buildPrompt(successQuestion, prompt.NewSuccessStyles(), prompt.WithYesNoDefaultYes()),
+		buildPrompt(infoQuestion, prompt.NewInfoStyles(), prompt.WithYesNoDefaultNo()),
 	}
 }
 
@@ -82,7 +77,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	p := m.steps[m.current]
-	if _, ok := p.IsMyAnswer(msg); ok {
+	_, isYes := msg.(prompt.YesMsg)
+	_, isNo := msg.(prompt.NoMsg)
+	_, isDefaultAnswer := p.IsMyAnswer(msg) // Enter-triggered default emits AnsweredMsg, not YesMsg/NoMsg
+	if isYes || isNo || isDefaultAnswer {
 		m.current++
 		if m.current >= len(m.steps) {
 			return m, nil

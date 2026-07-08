@@ -55,15 +55,32 @@ func findInvalidKeyMsg(cmds []tea.Cmd) *prompt.InvalidKeyMsg {
 	return nil
 }
 
+// testMsg is a stand-in Msg for tests that don't care which message a key
+// emits, just that pressing it does something structurally sound.
+type testMsg struct{ key rune }
+
+// newPrompt builds a PromptModel accepting the given keys, each emitting
+// testMsg, failing the test if construction errors (e.g. duplicate keys).
+func newPrompt(t *testing.T, question string, keys ...rune) *prompt.PromptModel {
+	t.Helper()
+	opts := make([]prompt.Option, len(keys))
+	for i, k := range keys {
+		opts[i] = prompt.WithOption(k, testMsg{key: k})
+	}
+	p, err := prompt.New(question, opts...)
+	require.NoError(t, err)
+	return p
+}
+
 func TestPrompt_UnfocusedIgnoresKeys(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	_, cmd := p.Update(keyPress("y"))
 	assert.Nil(t, cmd, "unfocused prompt should produce no command")
 	assert.Nil(t, p.Value(), "unfocused prompt should have no answer")
 }
 
 func TestPrompt_FocusResetsAnswer(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 	p.Update(keyPress("y"))
 
@@ -72,26 +89,8 @@ func TestPrompt_FocusResetsAnswer(t *testing.T) {
 	assert.Nil(t, p.Value(), "Focus should reset the answer")
 }
 
-func TestPrompt_RegisteredKeyEmitsAnsweredMsg(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.Focus() //nolint:errcheck
-
-	_, cmd := p.Update(keyPress("y"))
-	require.NotNil(t, cmd)
-
-	msg := runCmd(cmd)
-	am, ok := msg.(prompt.AnsweredMsg)
-	require.True(t, ok, "expected AnsweredMsg")
-	assert.Equal(t, 'y', am.Answer)
-	assert.Equal(t, p, am.Source)
-
-	val := p.Value()
-	require.NotNil(t, val)
-	assert.Equal(t, 'y', *val)
-}
-
 func TestPrompt_UnregisteredKeyProducesNoAnsweredMsg(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("x"))
@@ -106,8 +105,8 @@ func TestPrompt_UnregisteredKeyProducesNoAnsweredMsg(t *testing.T) {
 }
 
 func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetDefault('y')
+	p, err := prompt.New("Continue?", prompt.WithYesNoDefaultYes())
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
@@ -116,12 +115,15 @@ func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
 	msg := runCmd(cmd)
 	am, ok := msg.(prompt.AnsweredMsg)
 	require.True(t, ok, "Enter with default should emit AnsweredMsg")
-	assert.Equal(t, 'y', am.Answer)
+	assert.Equal(t, 'Y', am.Answer)
 }
 
 func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetInvalidKeyFlashDuration(time.Millisecond)
+	p, err := prompt.New("Continue?",
+		prompt.WithOption('y', testMsg{key: 'y'}), prompt.WithOption('n', testMsg{key: 'n'}),
+		prompt.WithInvalidKeyDuration(time.Millisecond),
+	)
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
@@ -132,54 +134,58 @@ func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
 }
 
 func TestPrompt_IsMyAnswer(t *testing.T) {
-	p1 := prompt.New("First?", 'y', 'n')
-	p2 := prompt.New("Second?", 'y', 'n')
+	p1, err := prompt.New("First?", prompt.WithYesNoDefaultYes())
+	require.NoError(t, err)
+	p2, err := prompt.New("Second?", prompt.WithYesNoDefaultYes())
+	require.NoError(t, err)
 	p1.Focus() //nolint:errcheck
 
-	_, cmd := p1.Update(keyPress("y"))
+	_, cmd := p1.Update(enterPress())
 	msg := runCmd(cmd)
 
 	ans, ok := p1.IsMyAnswer(msg)
 	assert.True(t, ok, "IsMyAnswer should match own source")
-	assert.Equal(t, 'y', ans)
+	assert.Equal(t, 'Y', ans)
 
 	_, ok = p2.IsMyAnswer(msg)
 	assert.False(t, ok, "IsMyAnswer should not match a different prompt")
 }
 
 func TestPrompt_IsMyAnswerReturnsFalseForOtherMsgs(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	r, ok := p.IsMyAnswer(keyPress("y"))
 	assert.False(t, ok)
 	assert.Equal(t, rune(0), r)
 }
 
-func TestPrompt_SetAcceptByEnterFalseDisablesEnter(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetDefault('y')
-	p.SetAcceptByEnter(false)
-	p.SetInvalidKeyFlashDuration(time.Millisecond)
+func TestPrompt_AcceptByEnterFalseDisablesEnter(t *testing.T) {
+	p, err := prompt.New("Continue?",
+		prompt.WithYesNoDefaultYes(),
+		prompt.WithAcceptByEnter(false),
+		prompt.WithInvalidKeyDuration(time.Millisecond),
+	)
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
 	ik := findInvalidKeyMsg(subCmds(t, cmd))
-	require.NotNil(t, ik, "Enter should be treated as invalid when SetAcceptByEnter(false)")
+	require.NotNil(t, ik, "Enter should be treated as invalid when WithAcceptByEnter(false)")
 	assert.Equal(t, "enter", ik.Key)
 	assert.Nil(t, p.Value())
 }
 
 func TestPrompt_ViewContainsDefaultHint(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetDefault('y')
+	p, err := prompt.New("Continue?", prompt.WithYesNoDefaultYes())
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	view := p.View().Content
-	// default key 'y' is shown uppercase in the choice hint: [Y/n]
+	// default key 'Y' is shown uppercase in the choice hint: [Y/n]
 	assert.Contains(t, view, "[Y/n]", "View should show the default key hint when focused")
 }
 
 func TestPrompt_ViewShowsEchoAfterAnswer(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 	p.Update(keyPress("n"))
 
@@ -188,7 +194,7 @@ func TestPrompt_ViewShowsEchoAfterAnswer(t *testing.T) {
 }
 
 func TestPrompt_Focused(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	assert.False(t, p.Focused())
 	p.Focus() //nolint:errcheck
 	assert.True(t, p.Focused())
@@ -197,8 +203,11 @@ func TestPrompt_Focused(t *testing.T) {
 }
 
 func TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetInvalidKeyFlashDuration(time.Millisecond)
+	p, err := prompt.New("Continue?",
+		prompt.WithOption('y', testMsg{key: 'y'}), prompt.WithOption('n', testMsg{key: 'n'}),
+		prompt.WithInvalidKeyDuration(time.Millisecond),
+	)
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("x"))
@@ -210,7 +219,7 @@ func TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg(t *testing.T) {
 }
 
 func TestPrompt_ViewShowsInvalidKeyWithoutHidingHint(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
+	p := newPrompt(t, "Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 	p.Update(keyPress("x"))
 
@@ -220,8 +229,11 @@ func TestPrompt_ViewShowsInvalidKeyWithoutHidingHint(t *testing.T) {
 }
 
 func TestPrompt_InvalidKeyFlashAutoClears(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetInvalidKeyFlashDuration(2 * time.Millisecond)
+	p, err := prompt.New("Continue?",
+		prompt.WithOption('y', testMsg{key: 'y'}), prompt.WithOption('n', testMsg{key: 'n'}),
+		prompt.WithInvalidKeyDuration(2*time.Millisecond),
+	)
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("x"))
@@ -236,8 +248,11 @@ func TestPrompt_InvalidKeyFlashAutoClears(t *testing.T) {
 }
 
 func TestPrompt_InvalidKeyGenerationGuardsStaleTimer(t *testing.T) {
-	p := prompt.New("Continue?", 'y', 'n')
-	p.SetInvalidKeyFlashDuration(2 * time.Millisecond)
+	p, err := prompt.New("Continue?",
+		prompt.WithOption('y', testMsg{key: 'y'}), prompt.WithOption('n', testMsg{key: 'n'}),
+		prompt.WithInvalidKeyDuration(2*time.Millisecond),
+	)
+	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmdA := p.Update(keyPress("x"))
@@ -251,4 +266,109 @@ func TestPrompt_InvalidKeyGenerationGuardsStaleTimer(t *testing.T) {
 	p.Update(staleClear)
 
 	assert.Contains(t, p.View().Content, "z", "stale timer must not clear a newer flash")
+}
+
+func TestNew_DuplicateKeyReturnsError(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithOption('y', testMsg{key: 'y'}), prompt.WithOption('y', testMsg{key: 'y'}))
+	require.Error(t, err)
+	assert.Nil(t, p)
+}
+
+func TestNew_DefaultKeyNotRegisteredReturnsError(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithOption('n', testMsg{key: 'n'}), prompt.WithDefault('y'))
+	require.Error(t, err)
+	assert.Nil(t, p)
+}
+
+func TestNew_WithDefaultBeforeWithOption(t *testing.T) {
+	p, err := prompt.New("Continue?",
+		prompt.WithDefault('y'),
+		prompt.WithOption('y', testMsg{key: 'y'}), prompt.WithOption('n', testMsg{key: 'n'}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+}
+
+func TestNew_NilMsgReturnsError(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithOption('y', nil))
+	require.Error(t, err)
+	assert.Nil(t, p)
+}
+
+type testCustomMsg struct{ note string }
+
+func TestPrompt_KeyWithCustomMsgEmitsIt(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithOption('y', testCustomMsg{note: "yes"}), prompt.WithOption('n', testMsg{key: 'n'}))
+	require.NoError(t, err)
+	p.Focus() //nolint:errcheck
+
+	_, cmd := p.Update(keyPress("y"))
+	msg := runCmd(cmd)
+	cm, ok := msg.(testCustomMsg)
+	require.True(t, ok, "expected the key's custom Msg")
+	assert.Equal(t, "yes", cm.note)
+	require.NotNil(t, p.Value())
+	assert.Equal(t, 'y', *p.Value())
+}
+
+func TestPrompt_EnterDefaultIgnoresCustomMsg(t *testing.T) {
+	p, err := prompt.New("Continue?",
+		prompt.WithOption('y', testCustomMsg{note: "yes"}), prompt.WithOption('n', testMsg{key: 'n'}),
+		prompt.WithDefault('y'),
+	)
+	require.NoError(t, err)
+	p.Focus() //nolint:errcheck
+
+	_, cmd := p.Update(enterPress())
+	msg := runCmd(cmd)
+	am, ok := msg.(prompt.AnsweredMsg)
+	require.True(t, ok, "Enter-triggered default must emit AnsweredMsg even if the key has a custom Msg")
+	assert.Equal(t, 'y', am.Answer)
+}
+
+func TestPrompt_WithYesNoEmitsYesOrNo(t *testing.T) {
+	py, err := prompt.New("Continue?", prompt.WithYesNo())
+	require.NoError(t, err)
+	py.Focus() //nolint:errcheck
+	_, cmd := py.Update(keyPress("y"))
+	_, ok := runCmd(cmd).(prompt.YesMsg)
+	assert.True(t, ok, "expected YesMsg")
+
+	pn, err := prompt.New("Continue?", prompt.WithYesNo())
+	require.NoError(t, err)
+	pn.Focus() //nolint:errcheck
+	_, cmd = pn.Update(keyPress("n"))
+	_, ok = runCmd(cmd).(prompt.NoMsg)
+	assert.True(t, ok, "expected NoMsg")
+}
+
+func TestPrompt_WithYesNoDefaultNoEmitsAnsweredMsg(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithYesNoDefaultNo())
+	require.NoError(t, err)
+	p.Focus() //nolint:errcheck
+
+	_, cmd := p.Update(enterPress())
+	am, ok := runCmd(cmd).(prompt.AnsweredMsg)
+	require.True(t, ok, "Enter with WithYesNoDefaultNo should emit AnsweredMsg")
+	assert.Equal(t, 'N', am.Answer)
+}
+
+func TestPrompt_WithYesNoDefaultYesUsesUppercaseY(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithYesNoDefaultYes())
+	require.NoError(t, err)
+	p.Focus() //nolint:errcheck
+
+	assert.Contains(t, p.View().Content, "[Y/n]", "choice hint should show uppercase Y as default")
+
+	_, cmd := p.Update(keyPress("Y"))
+	_, ok := runCmd(cmd).(prompt.YesMsg)
+	assert.True(t, ok, "pressing uppercase Y should emit YesMsg")
+}
+
+func TestPrompt_WithSuccessStylesAppliesPreset(t *testing.T) {
+	p, err := prompt.New("Continue?", prompt.WithYesNo(), prompt.WithSuccessStyles())
+	require.NoError(t, err)
+	p.Focus() //nolint:errcheck
+
+	assert.Contains(t, p.View().Content, "✓", "WithSuccessStyles should apply NewSuccessStyles's icon")
 }

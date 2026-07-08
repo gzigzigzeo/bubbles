@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,42 +15,130 @@ var enterKey = key.NewBinding(key.WithKeys("enter"))
 
 // defaultInvalidKeyFlash is how long the invalid-key hint stays visible
 // before automatically clearing, unless overridden with
-// SetInvalidKeyFlashDuration.
+// WithInvalidKeyDuration.
 const defaultInvalidKeyFlash = 600 * time.Millisecond
 
 // AnsweredMsg is emitted by Update when the user presses one of the accepted
-// keys. Source identifies which Prompt sent the answer so a parent with
+// keys. Source identifies which PromptModel sent the answer so a parent with
 // multiple prompts can dispatch by identity.
 type AnsweredMsg struct {
-	Source *Prompt
+	Source *PromptModel
 	Answer rune // the key rune that was pressed, e.g. 'y' or 'n'
 }
 
-// InvalidKeyMsg is emitted by Update when the user presses a key that is not
-// one of the accepted keys (and not Enter with a default set). Prompt also
-// shows a brief inline hint itself, so most callers can ignore this message;
-// it exists for host apps that want to react too, e.g. a terminal bell.
-type InvalidKeyMsg struct {
-	Source *Prompt
+// invalidKeyMsg is emitted internally by flagInvalid when the user presses a
+// key that is not one of the accepted keys (and not Enter with a default
+// set). Update uses it to drive the brief inline "invalid" hint.
+type invalidKeyMsg struct {
+	Source *PromptModel
 	Key    string // string representation of the rejected key, e.g. "x", "up"
 }
 
 // invalidKeyClearedMsg is sent by a timer started when an invalid key is
 // pressed. gen guards against a stale timer clearing a newer flash.
 type invalidKeyClearedMsg struct {
-	source *Prompt
+	source *PromptModel
 	gen    int
 }
 
-// Prompt is a configurable inline prompt that accepts one of the provided
-// single-character keys, then echoes the chosen key. The choice hint (e.g.
-// [y/n]) is rendered automatically — do not include it in the question string.
-// Use SetDefault to designate a default key and SetAcceptByEnter to control
-// whether Enter triggers that default.
-type Prompt struct {
+// Option configures a PromptModel during construction via New.
+type Option func(*PromptModel)
+
+// keyOption pairs an accepted key with the message it emits.
+type keyOption struct {
+	key rune
+	msg tea.Msg
+}
+
+// WithOption registers an accepted key. msg must be non-nil — New returns an
+// error if it isn't. Pressing key emits msg; AnsweredMsg is never emitted
+// for a direct key press (only via the Enter-triggered default, see
+// WithDefault).
+func WithOption(key rune, msg tea.Msg) Option {
+	return func(p *PromptModel) {
+		p.options = append(p.options, keyOption{key: key, msg: msg})
+	}
+}
+
+// YesMsg is emitted when the user presses 'y' on a prompt built with
+// WithYesNo, WithYesNoDefaultYes, or WithYesNoDefaultNo.
+type YesMsg struct{}
+
+// NoMsg is emitted when the user presses 'n' on a prompt built with
+// WithYesNo, WithYesNoDefaultYes, or WithYesNoDefaultNo.
+type NoMsg struct{}
+
+// WithYesNo registers the common y/n confirmation keys in one call: 'y'
+// emits YesMsg, 'n' emits NoMsg. It doesn't set a default — use
+// WithYesNoDefaultYes or WithYesNoDefaultNo for that.
+func WithYesNo() Option {
+	return func(p *PromptModel) {
+		WithOption('y', YesMsg{})(p)
+		WithOption('n', NoMsg{})(p)
+	}
+}
+
+// WithYesNoDefaultYes registers 'Y' (uppercase, the default answer) and 'n':
+// pressing 'Y' or Enter emits YesMsg, pressing 'n' emits NoMsg.
+func WithYesNoDefaultYes() Option {
+	return func(p *PromptModel) {
+		WithOption('Y', YesMsg{})(p)
+		WithOption('n', NoMsg{})(p)
+		WithDefault('Y')(p)
+	}
+}
+
+// WithYesNoDefaultNo registers 'y' and 'N' (uppercase, the default answer):
+// pressing 'y' emits YesMsg, pressing 'N' or Enter emits NoMsg.
+func WithYesNoDefaultNo() Option {
+	return func(p *PromptModel) {
+		WithOption('y', YesMsg{})(p)
+		WithOption('N', NoMsg{})(p)
+		WithDefault('N')(p)
+	}
+}
+
+// WithDefault marks key as the default answer: when Enter acceptance is
+// enabled (WithAcceptByEnter, on by default) and no key has been pressed,
+// Enter emits AnsweredMsg for key, regardless of that key's msg. New returns
+// an error if key was never registered via WithOption.
+func WithDefault(key rune) Option {
+	return func(p *PromptModel) { p.defaultKey = key }
+}
+
+// WithStyles sets the visual styles. New re-applies it (via SetStyles) after
+// every Option has run, so Cursor.Style/CursorTextStyle end up correct
+// regardless of whether WithCursor or WithStyles came first.
+func WithStyles(s Styles) Option {
+	return func(p *PromptModel) { p.styles = s }
+}
+
+// WithAcceptByEnter controls whether the Enter key triggers the default
+// answer set via WithDefault. Defaults to true.
+func WithAcceptByEnter(accept bool) Option {
+	return func(p *PromptModel) { p.rejectEnter = !accept }
+}
+
+// WithInvalidKeyDuration overrides how long the invalid-key hint stays
+// visible before automatically clearing. Defaults to 600ms.
+func WithInvalidKeyDuration(d time.Duration) Option {
+	return func(p *PromptModel) { p.invalidFlashTime = d }
+}
+
+// WithCursor seeds the initial cursor (e.g. after calling SetChar) instead
+// of the default cursor.New().
+func WithCursor(c cursor.Model) Option {
+	return func(p *PromptModel) { p.Cursor = c }
+}
+
+// PromptModel is a configurable inline prompt that accepts one of the
+// provided single-character keys, then echoes the chosen key. The choice
+// hint (e.g. [y/n]) is rendered automatically — do not include it in the
+// question string. Use WithDefault to designate a default key and
+// WithAcceptByEnter to control whether Enter triggers that default.
+type PromptModel struct {
 	question    string
-	keys        []rune
-	bindings    []key.Binding
+	options     []keyOption
 	defaultKey  rune // zero means no default
 	rejectEnter bool // when true Enter is ignored even if defaultKey is set
 	answer      *rune
@@ -65,58 +154,57 @@ type Prompt struct {
 	Cursor cursor.Model
 }
 
-// New creates a Prompt that accepts any of the given single-character keys.
-// Example: New("Continue?", 'y', 'n')
-func New(question string, keys ...rune) *Prompt {
-	bindings := make([]key.Binding, len(keys))
-	for i, k := range keys {
-		bindings[i] = key.NewBinding(key.WithKeys(string(k)))
-	}
-
-	return &Prompt{
+// New creates a PromptModel from the given Options (WithOption, WithYesNo,
+// WithDefault, WithStyles, WithAcceptByEnter, WithInvalidKeyDuration,
+// WithCursor). It returns an error if two options register the same key, if
+// any option's Msg is nil, or if WithDefault names a key that wasn't
+// registered via WithOption.
+func New(question string, opts ...Option) (*PromptModel, error) {
+	p := &PromptModel{
 		question:         question,
-		keys:             keys,
-		bindings:         bindings,
 		invalidFlashTime: defaultInvalidKeyFlash,
 		Cursor:           cursor.New(),
 	}
+
+	for _, opt := range opts {
+		opt(p)
+	}
+
+	seen := make(map[rune]bool, len(p.options))
+	for _, o := range p.options {
+		if seen[o.key] {
+			return nil, fmt.Errorf("prompt: duplicate key %q", o.key)
+		}
+		seen[o.key] = true
+		if o.msg == nil {
+			return nil, fmt.Errorf("prompt: option for key %q has a nil Msg", o.key)
+		}
+	}
+
+	if p.defaultKey != 0 && !seen[p.defaultKey] {
+		return nil, fmt.Errorf("prompt: default key %q is not among the registered options", p.defaultKey)
+	}
+
+	p.SetStyles(p.styles)
+
+	return p, nil
 }
 
 // SetStyles injects styles and applies the cursor appearance.
-func (p *Prompt) SetStyles(s Styles) {
+func (p *PromptModel) SetStyles(s Styles) {
 	p.styles = s
 	p.Cursor.Style = s.CursorStyle
 	p.Cursor.TextStyle = s.CursorTextStyle
 }
 
-// SetDefault marks the first rune of k as the default answer. When a default
-// is set and Enter acceptance is enabled, pressing Enter emits AnsweredMsg with
-// that rune as if the user had pressed it directly. The default key is shown
-// in upper case inside the choice hint (e.g. [Y/n]).
-func (p *Prompt) SetDefault(k rune) {
-	p.defaultKey = k
-}
-
-// SetAcceptByEnter controls whether the Enter key triggers the default answer.
-// The default is true. Set to false to require an explicit key press.
-func (p *Prompt) SetAcceptByEnter(accept bool) {
-	p.rejectEnter = !accept
-}
-
-// SetInvalidKeyFlashDuration overrides how long the invalid-key hint stays
-// visible before automatically clearing. The default is 600ms.
-func (p *Prompt) SetInvalidKeyFlashDuration(d time.Duration) {
-	p.invalidFlashTime = d
-}
-
 // Init starts cursor blinking without changing focus or answer state.
 // Call this from your tea.Model Init to satisfy the tea.Model interface.
-func (p *Prompt) Init() tea.Cmd {
+func (p *PromptModel) Init() tea.Cmd {
 	return p.Cursor.Focus()
 }
 
 // Focus focuses the prompt, resets any previous answer, and starts the cursor.
-func (p *Prompt) Focus() tea.Cmd {
+func (p *PromptModel) Focus() tea.Cmd {
 	p.focused = true
 	p.answer = nil
 	p.invalidKey = ""
@@ -126,7 +214,7 @@ func (p *Prompt) Focus() tea.Cmd {
 }
 
 // Blur removes focus and stops cursor blinking.
-func (p *Prompt) Blur() {
+func (p *PromptModel) Blur() {
 	p.focused = false
 	p.invalidKey = ""
 	p.invalidGen++
@@ -134,13 +222,13 @@ func (p *Prompt) Blur() {
 }
 
 // Focused reports whether the prompt is focused.
-func (p *Prompt) Focused() bool {
+func (p *PromptModel) Focused() bool {
 	return p.focused
 }
 
 // Value returns a pointer to the rune the user answered with, or nil if no
 // answer has been given yet.
-func (p *Prompt) Value() *rune {
+func (p *PromptModel) Value() *rune {
 	return p.answer
 }
 
@@ -148,7 +236,7 @@ func (p *Prompt) Value() *rune {
 // returns the answer rune. It encapsulates the common dispatch pattern:
 //
 //	if ans, ok := p.IsMyAnswer(msg); ok { ... }
-func (p *Prompt) IsMyAnswer(msg tea.Msg) (rune, bool) {
+func (p *PromptModel) IsMyAnswer(msg tea.Msg) (rune, bool) {
 	am, ok := msg.(AnsweredMsg)
 	if !ok || am.Source != p {
 		return 0, false
@@ -158,9 +246,9 @@ func (p *Prompt) IsMyAnswer(msg tea.Msg) (rune, bool) {
 
 // Update handles messages when focused: forwards to the cursor model for blink
 // animation and checks whether the key pressed is one of the accepted keys.
-// Unrecognized keys trigger a brief inline "invalid" flash and an
-// InvalidKeyMsg instead of being silently ignored.
-func (p *Prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Unrecognized keys trigger a brief inline "invalid" flash instead of being
+// silently ignored.
+func (p *PromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cm, ok := msg.(invalidKeyClearedMsg); ok {
 		p.handleInvalidKeyCleared(cm)
 		return p, nil
@@ -184,7 +272,7 @@ func (p *Prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleInvalidKeyCleared clears the invalid-key flash if cm still matches
 // the current generation, i.e. no newer invalid key has been pressed since
 // this clear timer was started.
-func (p *Prompt) handleInvalidKeyCleared(cm invalidKeyClearedMsg) {
+func (p *PromptModel) handleInvalidKeyCleared(cm invalidKeyClearedMsg) {
 	if cm.source == p && cm.gen == p.invalidGen {
 		p.invalidKey = ""
 	}
@@ -193,23 +281,24 @@ func (p *Prompt) handleInvalidKeyCleared(cm invalidKeyClearedMsg) {
 // handleKeyPress answers the prompt if km matches an accepted key or the
 // default-Enter binding, otherwise flags km as an invalid key. curCmd is the
 // cursor's own command for this message, preserved in either outcome.
-func (p *Prompt) handleKeyPress(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
-	if r, ok := p.matchedKey(km); ok {
-		return p.accept(r)
+func (p *PromptModel) handleKeyPress(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
+	if i, ok := p.matchedKeyIndex(km); ok {
+		return p.accept(p.options[i].key, p.options[i].msg)
 	}
 
 	if !p.rejectEnter && p.defaultKey != 0 && key.Matches(km, enterKey) {
-		return p.accept(p.defaultKey)
+		return p.accept(p.defaultKey, nil)
 	}
 
 	return p.flagInvalid(km, curCmd)
 }
 
-// matchedKey reports the rune bound to km among the accepted keys, if any.
-func (p *Prompt) matchedKey(km tea.KeyMsg) (rune, bool) {
-	for i, b := range p.bindings {
-		if key.Matches(km, b) {
-			return p.keys[i], true
+// matchedKeyIndex reports the index of the accepted key bound to km, if any.
+func (p *PromptModel) matchedKeyIndex(km tea.KeyMsg) (int, bool) {
+	s := km.String()
+	for i, o := range p.options {
+		if string(o.key) == s {
+			return i, true
 		}
 	}
 
@@ -217,25 +306,31 @@ func (p *Prompt) matchedKey(km tea.KeyMsg) (rune, bool) {
 }
 
 // accept records r as the answer, clears any invalid-key flash, and emits
-// AnsweredMsg.
-func (p *Prompt) accept(r rune) tea.Cmd {
+// msg if non-nil, otherwise the default AnsweredMsg. msg is nil only when
+// called from the Enter-triggered default path in handleKeyPress; the
+// matched-key path always passes a msg that New has already validated as
+// non-nil.
+func (p *PromptModel) accept(r rune, msg tea.Msg) tea.Cmd {
 	p.answer = &r
 	p.invalidKey = ""
 
+	if msg != nil {
+		return func() tea.Msg { return msg }
+	}
 	return func() tea.Msg { return AnsweredMsg{Source: p, Answer: r} }
 }
 
 // flagInvalid shows km as a brief invalid-key flash in place of the cursor,
 // schedules it to clear itself after invalidFlashTime, and emits
-// InvalidKeyMsg.
-func (p *Prompt) flagInvalid(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
+// invalidKeyMsg.
+func (p *PromptModel) flagInvalid(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
 	p.invalidGen++
 	gen := p.invalidGen
 	p.invalidKey = km.String()
 
 	return tea.Batch(
 		curCmd,
-		func() tea.Msg { return InvalidKeyMsg{Source: p, Key: km.String()} },
+		func() tea.Msg { return invalidKeyMsg{Source: p, Key: km.String()} },
 		tea.Tick(p.invalidFlashTime, func(time.Time) tea.Msg {
 			return invalidKeyClearedMsg{source: p, gen: gen}
 		}),
@@ -244,7 +339,7 @@ func (p *Prompt) flagInvalid(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
 
 // View renders the prompt: icon, question text with auto-generated choice hint,
 // and either a blinking cursor (while waiting) or the echoed answer rune.
-func (p *Prompt) View() tea.View {
+func (p *PromptModel) View() tea.View {
 	rawQuestion := p.question + " " + p.styles.Label.Render(p.choiceHint())
 
 	switch {
@@ -272,14 +367,14 @@ func (p *Prompt) View() tea.View {
 
 // choiceHint returns a formatted list of accepted keys, e.g. "[Y/n]".
 // The default key (if any) is shown in upper case.
-func (p *Prompt) choiceHint() string {
-	parts := make([]string, len(p.keys))
+func (p *PromptModel) choiceHint() string {
+	parts := make([]string, len(p.options))
 
-	for i, k := range p.keys {
-		if p.defaultKey != 0 && k == p.defaultKey {
-			parts[i] = strings.ToUpper(string(k))
+	for i, o := range p.options {
+		if p.defaultKey != 0 && o.key == p.defaultKey {
+			parts[i] = strings.ToUpper(string(o.key))
 		} else {
-			parts[i] = string(k)
+			parts[i] = string(o.key)
 		}
 	}
 
