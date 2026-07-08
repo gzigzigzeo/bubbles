@@ -77,10 +77,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	p := m.steps[m.current]
-	_, isYes := msg.(prompt.YesMsg)
-	_, isNo := msg.(prompt.NoMsg)
-	_, isDefaultAnswer := p.IsMyAnswer(msg) // Enter-triggered default emits AnsweredMsg, not YesMsg/NoMsg
-	if isYes || isNo || isDefaultAnswer {
+	switch msg.(type) {
+	case prompt.YesMsg, prompt.NoMsg:
 		m.current++
 		if m.current >= len(m.steps) {
 			return m, nil

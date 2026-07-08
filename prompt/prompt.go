@@ -18,14 +18,6 @@ var enterKey = key.NewBinding(key.WithKeys("enter"))
 // WithInvalidKeyDuration.
 const defaultInvalidKeyFlash = 600 * time.Millisecond
 
-// AnsweredMsg is emitted by Update when the user presses one of the accepted
-// keys. Source identifies which PromptModel sent the answer so a parent with
-// multiple prompts can dispatch by identity.
-type AnsweredMsg struct {
-	Source *PromptModel
-	Answer rune // the key rune that was pressed, e.g. 'y' or 'n'
-}
-
 // invalidKeyMsg is emitted internally by flagInvalid when the user presses a
 // key that is not one of the accepted keys (and not Enter with a default
 // set). Update uses it to drive the brief inline "invalid" hint.
@@ -51,9 +43,7 @@ type keyOption struct {
 }
 
 // WithOption registers an accepted key. msg must be non-nil — New returns an
-// error if it isn't. Pressing key emits msg; AnsweredMsg is never emitted
-// for a direct key press (only via the Enter-triggered default, see
-// WithDefault).
+// error if it isn't. Pressing key emits msg.
 func WithOption(key rune, msg tea.Msg) Option {
 	return func(p *PromptModel) {
 		p.options = append(p.options, keyOption{key: key, msg: msg})
@@ -100,8 +90,8 @@ func WithYesNoDefaultNo() Option {
 
 // WithDefault marks key as the default answer: when Enter acceptance is
 // enabled (WithAcceptByEnter, on by default) and no key has been pressed,
-// Enter emits AnsweredMsg for key, regardless of that key's msg. New returns
-// an error if key was never registered via WithOption.
+// Enter emits that key's registered Msg, exactly as if it had been pressed
+// directly. New returns an error if key was never registered via WithOption.
 func WithDefault(key rune) Option {
 	return func(p *PromptModel) { p.defaultKey = key }
 }
@@ -232,18 +222,6 @@ func (p *PromptModel) Value() *rune {
 	return p.answer
 }
 
-// IsMyAnswer reports whether msg is an AnsweredMsg emitted by this prompt and
-// returns the answer rune. It encapsulates the common dispatch pattern:
-//
-//	if ans, ok := p.IsMyAnswer(msg); ok { ... }
-func (p *PromptModel) IsMyAnswer(msg tea.Msg) (rune, bool) {
-	am, ok := msg.(AnsweredMsg)
-	if !ok || am.Source != p {
-		return 0, false
-	}
-	return am.Answer, true
-}
-
 // Update handles messages when focused: forwards to the cursor model for blink
 // animation and checks whether the key pressed is one of the accepted keys.
 // Unrecognized keys trigger a brief inline "invalid" flash instead of being
@@ -287,7 +265,11 @@ func (p *PromptModel) handleKeyPress(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
 	}
 
 	if !p.rejectEnter && p.defaultKey != 0 && key.Matches(km, enterKey) {
-		return p.accept(p.defaultKey, nil)
+		for _, o := range p.options {
+			if o.key == p.defaultKey {
+				return p.accept(o.key, o.msg)
+			}
+		}
 	}
 
 	return p.flagInvalid(km, curCmd)
@@ -305,19 +287,12 @@ func (p *PromptModel) matchedKeyIndex(km tea.KeyMsg) (int, bool) {
 	return 0, false
 }
 
-// accept records r as the answer, clears any invalid-key flash, and emits
-// msg if non-nil, otherwise the default AnsweredMsg. msg is nil only when
-// called from the Enter-triggered default path in handleKeyPress; the
-// matched-key path always passes a msg that New has already validated as
-// non-nil.
+// accept records r as the answer, clears any invalid-key flash, and emits msg.
 func (p *PromptModel) accept(r rune, msg tea.Msg) tea.Cmd {
 	p.answer = &r
 	p.invalidKey = ""
 
-	if msg != nil {
-		return func() tea.Msg { return msg }
-	}
-	return func() tea.Msg { return AnsweredMsg{Source: p, Answer: r} }
+	return func() tea.Msg { return msg }
 }
 
 // flagInvalid shows km as a brief invalid-key flash in place of the cursor,

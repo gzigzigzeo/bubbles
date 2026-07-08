@@ -89,22 +89,22 @@ func TestPrompt_FocusResetsAnswer(t *testing.T) {
 	assert.Nil(t, p.Value(), "Focus should reset the answer")
 }
 
-func TestPrompt_UnregisteredKeyProducesNoAnsweredMsg(t *testing.T) {
+func TestPrompt_UnregisteredKeyProducesNoAnswer(t *testing.T) {
 	p := newPrompt(t, "Continue?", 'y', 'n')
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(keyPress("x"))
 	// cmd now carries the invalid-key flash (see TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg),
-	// but it must never be an AnsweredMsg.
+	// but it must never be one of the registered keys' messages.
 	if cmd != nil {
 		msg := runCmd(cmd)
-		_, isAnswer := msg.(prompt.AnsweredMsg)
-		assert.False(t, isAnswer, "unregistered key must not emit AnsweredMsg")
+		_, isAnswer := msg.(testMsg)
+		assert.False(t, isAnswer, "unregistered key must not be accepted")
 	}
 	assert.Nil(t, p.Value())
 }
 
-func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
+func TestPrompt_EnterWithDefaultEmitsRegisteredMsg(t *testing.T) {
 	p, err := prompt.New("Continue?", prompt.WithYesNoDefaultYes())
 	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
@@ -113,9 +113,10 @@ func TestPrompt_EnterWithDefaultEmitsAnsweredMsg(t *testing.T) {
 	require.NotNil(t, cmd)
 
 	msg := runCmd(cmd)
-	am, ok := msg.(prompt.AnsweredMsg)
-	require.True(t, ok, "Enter with default should emit AnsweredMsg")
-	assert.Equal(t, 'Y', am.Answer)
+	_, ok := msg.(prompt.YesMsg)
+	require.True(t, ok, "Enter with default should emit the default key's registered Msg")
+	require.NotNil(t, p.Value())
+	assert.Equal(t, 'Y', *p.Value())
 }
 
 func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
@@ -131,31 +132,6 @@ func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
 	require.NotNil(t, ik, "Enter without a default should be treated as an invalid key")
 	assert.Equal(t, "enter", ik.Key)
 	assert.Nil(t, p.Value())
-}
-
-func TestPrompt_IsMyAnswer(t *testing.T) {
-	p1, err := prompt.New("First?", prompt.WithYesNoDefaultYes())
-	require.NoError(t, err)
-	p2, err := prompt.New("Second?", prompt.WithYesNoDefaultYes())
-	require.NoError(t, err)
-	p1.Focus() //nolint:errcheck
-
-	_, cmd := p1.Update(enterPress())
-	msg := runCmd(cmd)
-
-	ans, ok := p1.IsMyAnswer(msg)
-	assert.True(t, ok, "IsMyAnswer should match own source")
-	assert.Equal(t, 'Y', ans)
-
-	_, ok = p2.IsMyAnswer(msg)
-	assert.False(t, ok, "IsMyAnswer should not match a different prompt")
-}
-
-func TestPrompt_IsMyAnswerReturnsFalseForOtherMsgs(t *testing.T) {
-	p := newPrompt(t, "Continue?", 'y', 'n')
-	r, ok := p.IsMyAnswer(keyPress("y"))
-	assert.False(t, ok)
-	assert.Equal(t, rune(0), r)
 }
 
 func TestPrompt_AcceptByEnterFalseDisablesEnter(t *testing.T) {
@@ -311,7 +287,7 @@ func TestPrompt_KeyWithCustomMsgEmitsIt(t *testing.T) {
 	assert.Equal(t, 'y', *p.Value())
 }
 
-func TestPrompt_EnterDefaultIgnoresCustomMsg(t *testing.T) {
+func TestPrompt_EnterDefaultEmitsKeysOwnMsg(t *testing.T) {
 	p, err := prompt.New("Continue?",
 		prompt.WithOption('y', testCustomMsg{note: "yes"}), prompt.WithOption('n', testMsg{key: 'n'}),
 		prompt.WithDefault('y'),
@@ -321,9 +297,9 @@ func TestPrompt_EnterDefaultIgnoresCustomMsg(t *testing.T) {
 
 	_, cmd := p.Update(enterPress())
 	msg := runCmd(cmd)
-	am, ok := msg.(prompt.AnsweredMsg)
-	require.True(t, ok, "Enter-triggered default must emit AnsweredMsg even if the key has a custom Msg")
-	assert.Equal(t, 'y', am.Answer)
+	cm, ok := msg.(testCustomMsg)
+	require.True(t, ok, "Enter-triggered default should emit the default key's own registered Msg")
+	assert.Equal(t, "yes", cm.note)
 }
 
 func TestPrompt_WithYesNoEmitsYesOrNo(t *testing.T) {
@@ -342,15 +318,16 @@ func TestPrompt_WithYesNoEmitsYesOrNo(t *testing.T) {
 	assert.True(t, ok, "expected NoMsg")
 }
 
-func TestPrompt_WithYesNoDefaultNoEmitsAnsweredMsg(t *testing.T) {
+func TestPrompt_WithYesNoDefaultNoEmitsNoMsg(t *testing.T) {
 	p, err := prompt.New("Continue?", prompt.WithYesNoDefaultNo())
 	require.NoError(t, err)
 	p.Focus() //nolint:errcheck
 
 	_, cmd := p.Update(enterPress())
-	am, ok := runCmd(cmd).(prompt.AnsweredMsg)
-	require.True(t, ok, "Enter with WithYesNoDefaultNo should emit AnsweredMsg")
-	assert.Equal(t, 'N', am.Answer)
+	_, ok := runCmd(cmd).(prompt.NoMsg)
+	require.True(t, ok, "Enter with WithYesNoDefaultNo should emit NoMsg")
+	require.NotNil(t, p.Value())
+	assert.Equal(t, 'N', *p.Value())
 }
 
 func TestPrompt_WithYesNoDefaultYesUsesUppercaseY(t *testing.T) {

@@ -38,8 +38,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // In your model's View:
-func (m Model) View() string {
-    return p.View().Content
+func (m Model) View() tea.View {
+    return p.View()
 }
 ```
 
@@ -98,7 +98,7 @@ p.SetStyles(s)
 | `WithYesNoDefaultYes()` | Like `WithYesNo`, but registers `'Y'` (uppercase, the default) instead of `'y'` |
 | `WithYesNoDefaultNo()` | Like `WithYesNo`, but registers `'N'` (uppercase, the default) instead of `'n'` |
 | `WithOption(key rune, msg tea.Msg)` | Register one key with its own message (`msg` must be non-nil) |
-| `WithDefault(key rune)` | Make Enter emit this key as the answer (general-purpose; must name an already-registered key) |
+| `WithDefault(key rune)` | Make Enter emit this key's registered Msg, as if pressed directly (general-purpose; must name an already-registered key) |
 | `WithStyles(Styles)` | Apply style configuration at construction |
 | `WithWarnStyles()` / `WithErrorStyles()` / `WithSuccessStyles()` / `WithInfoStyles()` | Shorthand for `WithStyles(NewXStyles())` |
 | `WithAcceptByEnter(accept bool)` | Enable/disable Enter triggering the default (on by default) |
@@ -112,41 +112,13 @@ p.SetStyles(s)
 | `Update(tea.Msg) (tea.Model, tea.Cmd)` | Handle messages |
 | `View() tea.View` | Render |
 | `Value() *rune` | Current answer key, nil if unanswered |
-| `IsMyAnswer(tea.Msg) (rune, bool)` | Dispatch helper — returns the answer key |
-
-## AnsweredMsg
-
-Every direct key press emits exactly the `Msg` it was registered with via
-`WithOption`/`WithYesNo` (`YesMsg`, `NoMsg`, or your own type) — never
-`AnsweredMsg`. `AnsweredMsg` is emitted **only** when Enter triggers the
-default answer (`WithDefault`/`WithYesNoDefaultYes`/`WithYesNoDefaultNo` +
-`WithAcceptByEnter(true)`, the default), regardless of that key's registered
-`Msg`:
-
-```go
-type AnsweredMsg struct {
-    Source *PromptModel // which prompt answered
-    Answer rune    // key rune that was pressed, e.g. 'Y'
-}
-```
-
-Use `IsMyAnswer` to dispatch on that Enter/default path without comparing
-Sources manually:
-
-```go
-if ans, ok := p.IsMyAnswer(msg); ok {
-    switch ans {
-    case 'Y': // ...
-    case 'N': // ...
-    }
-}
-```
 
 ## YesMsg / NoMsg
 
 Emitted by a prompt built with `WithYesNo`, `WithYesNoDefaultYes`, or
-`WithYesNoDefaultNo` when the user presses the yes/no key directly (see
-`AnsweredMsg` above for the Enter-triggered-default exception):
+`WithYesNoDefaultNo`: `YesMsg` for `'y'`/`'Y'`, `NoMsg` for `'n'`/`'N'` —
+whether pressed directly or accepted via Enter as the default. Enter just
+answers as if that key had been pressed; there's no separate message for it.
 
 ```go
 type YesMsg struct{}
