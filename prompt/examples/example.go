@@ -17,14 +17,14 @@ import (
 const containerWidth = 60
 
 type model struct {
-	steps   []*prompt.PromptModel
+	steps   []*prompt.Model
 	current int
 }
 
 // buildPrompt constructs one step: yesNoOpt picks the key/default shape
 // (WithYesNo, WithYesNoDefaultYes, or WithYesNoDefaultNo), s supplies the
 // color preset, and extra carries anything else (e.g. WithAcceptByEnter).
-func buildPrompt(q string, s prompt.Styles, yesNoOpt prompt.Option, extra ...prompt.Option) *prompt.PromptModel {
+func buildPrompt(q string, s prompt.Styles, yesNoOpt prompt.Option, extra ...prompt.Option) *prompt.Model {
 	s.Container = lipgloss.NewStyle().Width(containerWidth).MarginBottom(1).Margin(1, 0)
 	opts := append([]prompt.Option{yesNoOpt, prompt.WithStyles(s)}, extra...)
 
@@ -35,24 +35,23 @@ func buildPrompt(q string, s prompt.Styles, yesNoOpt prompt.Option, extra ...pro
 	return p
 }
 
+const warningQuestion = "This is a warning prompt. Do you like it?"
+
+const errorQuestion = "This is an error prompt. Do you like it?"
+
 const successQuestion = "This is a long success prompt. The green color indicates a safe or " +
 	"completed action where confirming will trigger a positive outcome " +
 	"with no irreversible side effects. Do you like it?"
 
 const infoQuestion = "This is an info prompt. The neutral color scheme suits questions that " +
 	"are neither dangerous nor particularly positive, simply requiring " +
-	"a decision from you."
+	"a decision froyou.Are"
 
 // makeSteps returns the four standard style prompts in order.
-func makeSteps() []*prompt.PromptModel {
-	errorPrompt := buildPrompt(
-		"This is an error prompt. Do you like it?",
-		prompt.NewErrorStyles(), prompt.WithYesNo(), prompt.WithAcceptByEnter(false),
-	)
-
-	return []*prompt.PromptModel{
-		buildPrompt("This is a warning prompt. Do you like it?", prompt.NewWarnStyles(), prompt.WithYesNo()),
-		errorPrompt,
+func makeSteps() []*prompt.Model {
+	return []*prompt.Model{
+		buildPrompt(warningQuestion, prompt.NewWarnStyles(), prompt.WithYesNo()),
+		buildPrompt(errorQuestion, prompt.NewErrorStyles(), prompt.WithYesNo(), prompt.WithAcceptByEnter(false)),
 		buildPrompt(successQuestion, prompt.NewSuccessStyles(), prompt.WithYesNoDefaultYes()),
 		buildPrompt(infoQuestion, prompt.NewInfoStyles(), prompt.WithYesNoDefaultNo()),
 	}
@@ -71,11 +70,9 @@ func (m model) Init() tea.Cmd {
 // steps are answered, any further keypress exits.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.current >= len(m.steps) {
-		if _, ok := msg.(tea.KeyPressMsg); ok {
-			return m, tea.Quit
-		}
-		return m, nil
+		return m, tea.Quit
 	}
+
 	p := m.steps[m.current]
 	switch msg.(type) {
 	case prompt.YesMsg, prompt.NoMsg:
@@ -86,6 +83,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.steps[m.current].Focus()
 	}
 	_, cmd := p.Update(msg)
+
 	return m, cmd
 }
 

@@ -134,6 +134,17 @@ It clears itself automatically after `WithInvalidKeyDuration`'s duration
 (600ms by default). This happens automatically in `View()`; no action is
 required from the host app.
 
+## Known limitations
+
+The cursor (or the echoed answer / invalid-key flash that replaces it) can
+fail to render when it lands right at the edge of `Container`'s width while
+the question text itself doesn't need to wrap. This happens because
+lipgloss's word-wrap drops trailing whitespace-only content that would
+overflow the wrap width instead of wrapping it onto a new line, and the
+cursor is often exactly that: a bare space with only ANSI styling. If you
+hit this, give `Container`'s width a little headroom beyond the longest
+line you expect so the marker doesn't land exactly on the wrap boundary.
+
 ---
 
 Sponsored by [imgproxy](https://imgproxy.net).

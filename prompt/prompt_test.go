@@ -61,7 +61,7 @@ type testMsg struct{ key rune }
 
 // newPrompt builds a PromptModel accepting the given keys, each emitting
 // testMsg, failing the test if construction errors (e.g. duplicate keys).
-func newPrompt(t *testing.T, question string, keys ...rune) *prompt.PromptModel {
+func newPrompt(t *testing.T, question string, keys ...rune) *prompt.Model {
 	t.Helper()
 	opts := make([]prompt.Option, len(keys))
 	for i, k := range keys {

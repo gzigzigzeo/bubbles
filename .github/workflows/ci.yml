@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [prompt]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ matrix.dir }}/go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: ${{ matrix.dir }}
+
+  test:
+    name: test (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [prompt]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ matrix.dir }}/go.mod
+      - run: go test ./...
+        working-directory: ${{ matrix.dir }}
+
+  govulncheck:
+    name: govulncheck (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [prompt]
+    steps:
+      - uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: ${{ matrix.dir }}/go.mod
+          work-dir: ${{ matrix.dir }}
