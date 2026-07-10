@@ -7,6 +7,11 @@ imported independently.
 
 ## Components
 
+- [navstack](./navstack) — a generic navigation stack for building multi-screen
+  wizards, with `Push`/`Replace`/`Pop` and built-in back-navigation.
+
+  ![navstack example](./navstack/example.gif)
+
 - [prompt](./prompt) — a configurable inline prompt bubble that accepts one of
   a set of single-character keys and echoes the chosen key inline.
 
