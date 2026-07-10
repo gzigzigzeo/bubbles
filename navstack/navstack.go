@@ -21,7 +21,7 @@ type StackView interface {
 // NavStack is a reusable navigation stack parameterized on V, the strategy used to
 // compose View() from the current screen stack. Embed *NavStack[V] in App and
 // per-target flows to get a consistent push/replace/pop stack with back-navigation
-// built in.
+// built in. The zero value is not usable; construct with New.
 type NavStack[V StackView] struct {
 	stack []tea.Model
 	view  V
@@ -52,6 +52,7 @@ func (b *NavStack[V]) Pop() {
 		return
 	}
 
+	b.stack[len(b.stack)-1] = nil
 	b.stack = b.stack[:len(b.stack)-1]
 }
 
@@ -78,32 +79,47 @@ func (b *NavStack[V]) View() tea.View {
 // Strategy returns the StackView backing View(). Most callers only need
 // TailView or SequenceView's View() method, satisfied through NavStack
 // itself, but a caller with its own StackView implementation carrying extra
-// state or methods (e.g. sizing) can use this to reach it directly.
+// state or methods (e.g. sizing) can use this to reach it directly. Use
+// WithStrategy to inject a configured instance.
 func (b *NavStack[V]) Strategy() V {
 	return b.view
 }
 
-// noop is returned after a NavStack pops on BackMsg so parent NavStacks
-// know the message was already handled and should not pop themselves.
+// WithStrategy sets the StackView instance backing View() and returns b for
+// chaining. Use it when V carries its own state (e.g. sizing); TailView and
+// SequenceView are stateless and don't need this.
+func (b *NavStack[V]) WithStrategy(view V) *NavStack[V] {
+	b.view = view
+	return b
+}
+
+// noop is batched alongside a revealed screen's Init() cmd after a BackMsg
+// pop so the result is always a non-nil tea.Cmd, even when that Init()
+// itself returns nil. Update's own cmd == nil check is how a NavStack
+// embedded as a screen inside another NavStack tells its parent "I already
+// handled this BackMsg" — tea.Batch propagates non-nil-ness based on the cmd
+// function values it's given, not on the messages they produce when called,
+// so it stays non-nil regardless of what noop or Init() yield when invoked.
+// Do not replace this with a literal nil: that would make cmd == nil true
+// again after a pop, and a parent NavStack would double-pop in response.
 var noop tea.Cmd = func() tea.Msg { return nil }
 
-// Update delegates BackMsg to the top screen first. If the top returns nil
-// (it was already at its root and couldn't go back) and this stack has more
-// than one screen, this stack pops itself, calls Init() on the screen it
-// reveals (so it can reclaim focus, e.g. a text field), and returns noop
-// batched with that Init() cmd so its parent knows not to pop again even if
-// the revealed screen's own Init() returns nil. All other messages are
-// delegated to the top screen.
+// Update delegates BackMsg to the top screen first. If the top screen
+// returns a non-nil command, Update forwards it unchanged — BackMsg is
+// considered handled, but any real work the screen requested still runs. If
+// it returns nil and this stack has more than one screen, this stack pops
+// itself, calls Init() on the screen it reveals (so it can reclaim focus,
+// e.g. a text field), and returns noop batched with that Init() cmd so its
+// parent knows not to pop again even if the revealed screen's own Init()
+// returns nil. All other messages are delegated to the top screen and their
+// command is returned as-is.
 func (b *NavStack[V]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	updated, cmd := b.Top().Update(msg)
 	b.stack[len(b.stack)-1] = updated
 
-	if _, ok := msg.(BackMsg); ok {
-		if cmd == nil && len(b.stack) > 1 {
-			b.Pop()
-			return b, tea.Batch(noop, b.Top().Init())
-		}
-		return b, nil
+	if _, ok := msg.(BackMsg); ok && cmd == nil && len(b.stack) > 1 {
+		b.Pop()
+		return b, tea.Batch(noop, b.Top().Init())
 	}
 
 	return b, cmd

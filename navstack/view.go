@@ -22,12 +22,19 @@ type SequenceView struct{}
 // BackgroundColor).
 func (SequenceView) View(stack []tea.Model) tea.View {
 	parts := make([]string, len(stack))
+	var top tea.View
+
 	for i, s := range stack {
 		parts[i] = s.View().Content
 	}
 
-	top := stack[len(stack)-1].View()
-	top.SetContent(lipgloss.JoinVertical(lipgloss.Left, parts...))
+	if len(parts) > 1 {
+		top = stack[len(stack)-1].View()
+	}
+
+	if len(parts) > 0 {
+		top.SetContent(lipgloss.JoinVertical(lipgloss.Left, parts...))
+	}
 
 	return top
 }

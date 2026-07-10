@@ -61,9 +61,10 @@ See [`examples/example.go`](./examples/example.go) for a complete runnable wizar
 - **`TailView`** renders only the topmost screen — the common case for a wizard where each step replaces the last on screen.
 - **`SequenceView`** renders every screen in the stack, oldest first, joined vertically, so completed steps stay visible above the active one (e.g. a scrollback-style flow). It preserves the topmost screen's other `tea.View` fields (`AltScreen`, `Cursor`, etc.) — only `Content` is the joined result.
 
-Both are stateless zero-value types, so `navstack.New[V]` needs no extra setup. If you write your own `StackView` with additional state (e.g. sizing), reach it via `Strategy()`:
+Both are stateless zero-value types, so `navstack.New[V]` needs no extra setup. If you write your own `StackView` with additional state (e.g. sizing), inject it with `WithStrategy` and reach it back via `Strategy()`:
 
 ```go
+stack.WithStrategy(&mySizingView{width: 80})
 stack.Strategy().SomeMethod()
 ```
 
@@ -71,7 +72,7 @@ stack.Strategy().SomeMethod()
 
 `Update` gives the top screen first crack at `BackMsg`:
 
-- If the top screen's `Update` returns a **non-nil** command, `NavStack` treats `BackMsg` as handled and does nothing further (no pop).
+- If the top screen's `Update` returns a **non-nil** command, `NavStack` treats `BackMsg` as handled and does not pop — but it still forwards that command, so any real work the screen requested still runs.
 - If it returns **nil** and more than one screen remains, `NavStack` pops, calls `Init()` on the newly revealed screen (so it can reclaim focus — e.g. a text field's cursor), and returns that `Init()` command batched with an internal no-op. The no-op only signals "already handled" to a `NavStack` embedding this one a level up; it carries no observable behavior of its own.
 - If it returns nil and this is the only screen left, `Update` returns nil — `Pop` is a no-op at the root, so an outer `NavStack` (if any) can react to the message next.
 
@@ -86,6 +87,7 @@ stack.Strategy().SomeMethod()
 | `Len() int` | Number of screens currently in the stack |
 | `Top() tea.Model` | The current top screen |
 | `Strategy() V` | The `StackView` backing `View()`, for reaching extra methods on a custom one |
+| `WithStrategy(view V) *NavStack[V]` | Set the `StackView` instance backing `View()`; returns the receiver for chaining |
 | `Init() tea.Cmd` | Delegates to the top screen's `Init()` (satisfies `tea.Model`) |
 | `Update(tea.Msg) (tea.Model, tea.Cmd)` | Handles `BackMsg` per the rules above; delegates everything else to the top screen |
 | `View() tea.View` | Delegates to `V`'s composition strategy over the full stack |

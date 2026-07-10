@@ -169,7 +169,8 @@ func TestUpdate_BackMsgNotPoppedWhenTopHandlesIt(t *testing.T) {
 
 	assert.Equal(t, 2, s.Len(), "stack must not pop when the top screen handles BackMsg itself")
 	assert.Same(t, child, s.Top())
-	assert.Nil(t, cmd, "the stack itself reports no further command once the top screen has handled BackMsg")
+	require.NotNil(t, cmd, "the stack must forward the top screen's own command instead of discarding it")
+	assert.Equal(t, "child-handled-back", runCmd(cmd))
 }
 
 func TestUpdate_BackMsgPopsAndInitsRevealedScreenWhenTopCannotGoBack(t *testing.T) {
@@ -259,6 +260,14 @@ func TestSequenceView_PreservesTopScreenOtherViewFields(t *testing.T) {
 func TestStrategy_ReturnsStackView(t *testing.T) {
 	s := navstack.New[navstack.TailView](newFakeScreen("root"))
 	assert.Equal(t, navstack.TailView{}, s.Strategy())
+}
+
+func TestWithStrategy_SetsStrategy(t *testing.T) {
+	s := navstack.New[navstack.SequenceView](newFakeScreen("root"))
+	returned := s.WithStrategy(navstack.SequenceView{})
+
+	assert.Same(t, s, returned, "WithStrategy must return the receiver for chaining")
+	assert.Equal(t, navstack.SequenceView{}, s.Strategy())
 }
 
 func TestBack_ReturnsBackMsg(t *testing.T) {

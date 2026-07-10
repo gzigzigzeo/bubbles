@@ -96,18 +96,21 @@ func detailsStep() stepScreen {
 // so the same steps can be toured under both TailView and SequenceView.
 type wizard[V navstack.StackView] struct {
 	*navstack.NavStack[V]
+	step int
 }
 
 func newWizard[V navstack.StackView](note string) *wizard[V] {
-	return &wizard[V]{NavStack: navstack.New[V](welcomeStep(note))}
+	return &wizard[V]{NavStack: navstack.New[V](welcomeStep(note)), step: 1}
 }
 
 func (w *wizard[V]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(advanceMsg); ok {
-		switch w.Len() {
+		switch w.step {
 		case 1:
+			w.step = 2
 			return w, w.Push(detailsStep())
 		case 2:
+			w.step = 3
 			return w, w.Replace(doneScreen{})
 		}
 		return w, nil
