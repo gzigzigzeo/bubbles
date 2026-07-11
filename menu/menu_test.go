@@ -27,14 +27,14 @@ func options(names ...string) []menu.Option[string] {
 	return opts
 }
 
-func newMenu(opts []menu.Option[string]) *menu.Menu[string] {
+func newMenu(opts []menu.Option[string]) *menu.Model[string] {
 	m := menu.New(opts)
 	m.SetWidth(40)
 
 	return m
 }
 
-func pressKey(t *testing.T, m *menu.Menu[string], km tea.KeyMsg) tea.Cmd {
+func pressKey(t *testing.T, m *menu.Model[string], km tea.KeyMsg) tea.Cmd {
 	t.Helper()
 
 	updated, cmd := m.Update(km)

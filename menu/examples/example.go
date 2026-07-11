@@ -22,7 +22,7 @@ var fruits = []string{
 }
 
 type model struct {
-	menu    *menu.Menu[string]
+	menu    *menu.Model[string]
 	chosen  string
 	styleHd lipgloss.Style
 }

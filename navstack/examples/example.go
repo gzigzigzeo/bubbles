@@ -95,12 +95,12 @@ func detailsStep() stepScreen {
 // wizard is the Welcome/Details/Done flow, generic over the render strategy
 // so the same steps can be toured under both TailView and SequenceView.
 type wizard[V navstack.StackView] struct {
-	*navstack.NavStack[V]
+	*navstack.Model[V]
 	step int
 }
 
 func newWizard[V navstack.StackView](note string) *wizard[V] {
-	return &wizard[V]{NavStack: navstack.New[V](welcomeStep(note)), step: 1}
+	return &wizard[V]{Model: navstack.New[V](welcomeStep(note)), step: 1}
 }
 
 func (w *wizard[V]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -116,7 +116,7 @@ func (w *wizard[V]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return w, nil
 	}
 
-	_, cmd := w.NavStack.Update(msg)
+	_, cmd := w.Model.Update(msg)
 	return w, cmd
 }
 
@@ -124,7 +124,7 @@ func (w *wizard[V]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // below everything — even under SequenceView, where every step in the stack
 // gets its own line, that hint would otherwise repeat once per step.
 func (w *wizard[V]) View() tea.View {
-	view := w.NavStack.View()
+	view := w.Model.View()
 
 	if _, ok := w.Top().(stepScreen); ok {
 		view.SetContent(view.Content + "\n" + hintStyle.Render("[enter] continue   [esc] back"))
@@ -138,11 +138,11 @@ func (w *wizard[V]) View() tea.View {
 // Len() tells it which phase is active — the same way a real app's root
 // model nests a flow's NavStack inside its own.
 type app struct {
-	*navstack.NavStack[navstack.TailView]
+	*navstack.Model[navstack.TailView]
 }
 
 func newApp() app {
-	return app{NavStack: navstack.New[navstack.TailView](
+	return app{Model: navstack.New[navstack.TailView](
 		newWizard[navstack.TailView]("Only this step is shown — that's TailView."),
 	)}
 }
@@ -163,7 +163,7 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Quit
 	}
 
-	_, cmd := a.NavStack.Update(msg)
+	_, cmd := a.Model.Update(msg)
 	return a, cmd
 }
 

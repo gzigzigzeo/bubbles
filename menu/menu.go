@@ -47,12 +47,12 @@ type ChoiceMsg[T any] struct {
 	Option *Option[T]
 }
 
-// Menu is a cursor-driven, optionally height-limited list of Options,
+// Model is a cursor-driven, optionally height-limited list of Options,
 // scrolled by an embedded viewport.Model. It exposes the key bindings it
 // responds to via Keys, but never renders a hint bar itself — callers own
 // that. T is constrained to comparable so the cursor can be positioned by
 // value (SetCursor/Cursor) instead of by index.
-type Menu[T comparable] struct {
+type Model[T comparable] struct {
 	options         []Option[T]
 	widestNameWidth int // cached widestName(), recomputed only when options change
 	styles          Styles
@@ -67,8 +67,8 @@ type Menu[T comparable] struct {
 
 // New creates a Menu over options. By default every option is shown with no
 // scrolling; call SetHeight to limit the visible rows.
-func New[T comparable](options []Option[T]) *Menu[T] {
-	m := &Menu[T]{
+func New[T comparable](options []Option[T]) *Model[T] {
+	m := &Model[T]{
 		options: options,
 		vp:      viewport.New(),
 	}
@@ -81,7 +81,7 @@ func New[T comparable](options []Option[T]) *Menu[T] {
 }
 
 // SetStyles sets the visual styles used to render the menu.
-func (m *Menu[T]) SetStyles(s Styles) {
+func (m *Model[T]) SetStyles(s Styles) {
 	m.styles = s
 	m.syncContent()
 	m.applyHeight()
@@ -91,7 +91,7 @@ func (m *Menu[T]) SetStyles(s Styles) {
 // SetWidth sets the width of the menu's viewport and the width each row is
 // truncated to. w <= 0 resets to unlimited: rows are rendered at their
 // natural length, uncapped.
-func (m *Menu[T]) SetWidth(w int) {
+func (m *Model[T]) SetWidth(w int) {
 	m.width = w
 	m.vp.SetWidth(w)
 	m.syncContent()
@@ -102,7 +102,7 @@ func (m *Menu[T]) SetWidth(w int) {
 // SetHeight limits how many option rows View() renders, scrolling
 // internally past that. h <= 0 resets to unlimited (every option shown, no
 // scrolling).
-func (m *Menu[T]) SetHeight(h int) {
+func (m *Model[T]) SetHeight(h int) {
 	m.height = h
 	m.applyHeight()
 	m.scrollCursorIntoView()
@@ -111,7 +111,7 @@ func (m *Menu[T]) SetHeight(h int) {
 // applyHeight resolves the configured height onto the viewport. h <= 0
 // means unlimited: every option is shown, recomputed fresh off the current
 // option count so it stays correct after SetOptions changes it.
-func (m *Menu[T]) applyHeight() {
+func (m *Model[T]) applyHeight() {
 	h := m.height
 	if h <= 0 {
 		h = len(m.options)
@@ -121,7 +121,7 @@ func (m *Menu[T]) applyHeight() {
 }
 
 // Cursor returns the Value of the currently highlighted option.
-func (m *Menu[T]) Cursor() T {
+func (m *Model[T]) Cursor() T {
 	return m.options[m.cursor].Value
 }
 
@@ -130,7 +130,7 @@ func (m *Menu[T]) Cursor() T {
 // been applied. A caller embedding the menu inside a taller scrollable
 // container (e.g. Form) can use this to keep the cursor's actual line
 // visible as the user navigates, rather than the menu's full extent.
-func (m *Menu[T]) CursorLine() int {
+func (m *Model[T]) CursorLine() int {
 	return m.cursor - m.vp.YOffset()
 }
 
@@ -139,7 +139,7 @@ func (m *Menu[T]) CursorLine() int {
 // cursor resets to the first option; the marker is left untouched, so
 // callers whose committed value no longer appears in the new list should
 // call SetMarker (or SetCursor) with a valid value afterwards.
-func (m *Menu[T]) SetOptions(options []Option[T]) {
+func (m *Model[T]) SetOptions(options []Option[T]) {
 	m.options = options
 	m.cursor = 0
 	m.syncNameWidth()
@@ -153,7 +153,7 @@ func (m *Menu[T]) SetOptions(options []Option[T]) {
 // independent of the cursor — e.g. to show which value is currently
 // committed while the user browses elsewhere. Multiple markers aren't
 // supported; call it again to move the mark.
-func (m *Menu[T]) SetMarker(value T) {
+func (m *Model[T]) SetMarker(value T) {
 	m.marker = value
 	m.hasMarker = true
 	m.syncContent()
@@ -161,7 +161,7 @@ func (m *Menu[T]) SetMarker(value T) {
 
 // SetValue moves the cursor to the option whose Value equals value,
 // scrolling its row fully into view. It's a no-op if no option matches.
-func (m *Menu[T]) SetValue(value T) {
+func (m *Model[T]) SetValue(value T) {
 	for i, opt := range m.options {
 		if opt.Value == value {
 			m.setCursorIndex(i)
@@ -172,7 +172,7 @@ func (m *Menu[T]) SetValue(value T) {
 
 // setCursorIndex moves the cursor to i, clamped to the option range, and
 // scrolls its row fully into view.
-func (m *Menu[T]) setCursorIndex(i int) {
+func (m *Model[T]) setCursorIndex(i int) {
 	if len(m.options) == 0 {
 		return
 	}
@@ -196,7 +196,7 @@ func (m *Menu[T]) setCursorIndex(i int) {
 // reveals it at the window's bottom instead of making it the new top —
 // viewport.EnsureVisible always does the latter, which reads as a full-page
 // jump instead of a smooth one-row scroll.
-func (m *Menu[T]) scrollCursorIntoView() {
+func (m *Model[T]) scrollCursorIntoView() {
 	line := m.cursor
 	height := m.vp.Height()
 
@@ -212,12 +212,12 @@ func (m *Menu[T]) scrollCursorIntoView() {
 // include in their own hint bar. It deliberately omits the viewport's bonus
 // PgUp/PgDn/mouse-wheel scrolling, which is a free enhancement rather than a
 // promised interaction.
-func (m *Menu[T]) Keys() []key.Binding {
+func (m *Model[T]) Keys() []key.Binding {
 	return []key.Binding{menuKeyUp, menuKeyDown, menuKeySelect}
 }
 
 // Init satisfies the tea.Model interface.
-func (m *Menu[T]) Init() tea.Cmd {
+func (m *Model[T]) Init() tea.Cmd {
 	return m.vp.Init()
 }
 
@@ -225,7 +225,7 @@ func (m *Menu[T]) Init() tea.Cmd {
 // for the selected option on Select. Every other message — including the
 // viewport's own PgUp/PgDn/mouse-wheel handling — is forwarded to the
 // embedded viewport.
-func (m *Menu[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case key.Matches(km, menuKeyUp):
@@ -248,14 +248,14 @@ func (m *Menu[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // fireChoice returns a Cmd emitting a Choice[T] for the currently selected
 // option. The Option pointer is into m.options, which is never resized
 // after construction, so it stays valid for the Menu's lifetime.
-func (m *Menu[T]) fireChoice() tea.Cmd {
+func (m *Model[T]) fireChoice() tea.Cmd {
 	opt := &m.options[m.cursor]
 	return func() tea.Msg { return ChoiceMsg[T]{Value: opt.Value, Option: opt} }
 }
 
 // View renders the menu's viewport, its leftmost column carrying the scroll
 // and cursor indicators (see gutter).
-func (m *Menu[T]) View() tea.View {
+func (m *Model[T]) View() tea.View {
 	return tea.NewView(m.vp.View())
 }
 
@@ -265,7 +265,7 @@ func (m *Menu[T]) View() tea.View {
 // immediately followed by the cursor glyph (CursorFocused/CursorBlurred).
 // If the viewport is only one line tall, "scroll up" wins over "scroll
 // down" — an edge case not worth a second indicator on one row.
-func (m *Menu[T]) gutter(ctx viewport.GutterContext) string {
+func (m *Model[T]) gutter(ctx viewport.GutterContext) string {
 	return m.scrollIndicator(ctx) + m.cursorIndicator(ctx.Index)
 }
 
@@ -276,7 +276,7 @@ func (m *Menu[T]) gutter(ctx viewport.GutterContext) string {
 // its width, causing infinite recursion. Height() is the configured height,
 // which equals the actual visible line count whenever there's enough
 // content to scroll (the only case the "more below" arrow can ever apply).
-func (m *Menu[T]) scrollIndicator(ctx viewport.GutterContext) string {
+func (m *Model[T]) scrollIndicator(ctx viewport.GutterContext) string {
 	last := m.vp.YOffset() + m.vp.Height() - 1
 
 	switch {
@@ -293,7 +293,7 @@ func (m *Menu[T]) scrollIndicator(ctx viewport.GutterContext) string {
 // option's line, CursorMarked if it's the marked option's line (and not the
 // cursor's), CursorBlurred otherwise, or a same-width blank if line is out
 // of range.
-func (m *Menu[T]) cursorIndicator(line int) string {
+func (m *Model[T]) cursorIndicator(line int) string {
 	switch {
 	case line < 0 || line >= len(m.options):
 		return strings.Repeat(" ", lipgloss.Width(m.styles.CursorFocused.Render()))
@@ -309,7 +309,7 @@ func (m *Menu[T]) cursorIndicator(line int) string {
 // syncNameWidth recomputes the cached column width needed to align the
 // Description column (0 if no option has a Description). Called only when
 // m.options changes.
-func (m *Menu[T]) syncNameWidth() {
+func (m *Model[T]) syncNameWidth() {
 	widest := 0
 	hasDesc := false
 
@@ -333,7 +333,7 @@ func (m *Menu[T]) syncNameWidth() {
 // them into the viewport. Description is rendered at its natural length,
 // never wrapped; rows wider than the configured width are truncated with a
 // trailing ellipsis instead (see availableRowWidth).
-func (m *Menu[T]) syncContent() {
+func (m *Model[T]) syncContent() {
 	widest := m.widestNameWidth
 	available := max(0, m.width-m.gutterWidth())
 
@@ -374,6 +374,6 @@ func (m *Menu[T]) syncContent() {
 // (scroll indicator immediately followed by the cursor glyph), matching
 // what gutter always produces regardless of which branch scrollIndicator/
 // cursorIndicator take on a given line.
-func (m *Menu[T]) gutterWidth() int {
+func (m *Model[T]) gutterWidth() int {
 	return lipgloss.Width(m.styles.ScrollUp.Render()) + lipgloss.Width(m.styles.CursorFocused.Render())
 }
