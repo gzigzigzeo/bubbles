@@ -17,6 +17,11 @@ imported independently.
 
   ![prompt example](./prompt/example.gif)
 
+- [menu](./menu) — a cursor-driven, scrollable select list with an optional
+  secondary "marker" for showing a separately committed value.
+
+  ![menu example](./menu/example.gif)
+
 ---
 
 Sponsored by [imgproxy](https://imgproxy.net).
