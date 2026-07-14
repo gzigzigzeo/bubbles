@@ -99,7 +99,7 @@ func TestFocusFirst(t *testing.T) {
 	)
 	_ = n.FocusFirst()
 
-	require.Equal(t, 1, n.focused)
+	require.Equal(t, 1, n.ctrl.FocusedIndex())
 	require.Equal(t, 1, n.CursorLine())
 }
 
@@ -111,7 +111,7 @@ func TestFocusLast(t *testing.T) {
 	)
 	_ = n.FocusLast()
 
-	require.Equal(t, 2, n.focused)
+	require.Equal(t, 2, n.ctrl.FocusedIndex())
 	require.Equal(t, 2, n.CursorLine())
 }
 
@@ -124,13 +124,13 @@ func TestOpenMode_KeepsFocusAtBoundaries(t *testing.T) {
 
 	// Up at first focusable should keep focus on Alpha.
 	sendKey(t, n, "up")
-	require.Equal(t, 0, n.focused)
+	require.Equal(t, 0, n.ctrl.FocusedIndex())
 	require.True(t, n.IsAtFirstFocusable())
 
 	// Move to Beta and press down; focus should stay on Beta.
 	sendKey(t, n, "down")
 	sendKey(t, n, "down")
-	require.Equal(t, 1, n.focused)
+	require.Equal(t, 1, n.ctrl.FocusedIndex())
 	require.True(t, n.IsAtLastFocusable())
 }
 
@@ -144,11 +144,11 @@ func TestWrapMode_WrapsAtBoundaries(t *testing.T) {
 
 	// Up at first should wrap to last.
 	sendKey(t, n, "up")
-	require.Equal(t, 1, n.focused)
+	require.Equal(t, 1, n.ctrl.FocusedIndex())
 
 	// Down at last should wrap to first.
 	sendKey(t, n, "down")
-	require.Equal(t, 0, n.focused)
+	require.Equal(t, 0, n.ctrl.FocusedIndex())
 }
 
 func TestDisabledRows_AreSkipped(t *testing.T) {
@@ -159,11 +159,11 @@ func TestDisabledRows_AreSkipped(t *testing.T) {
 	)
 	_ = n.FocusFirst()
 
-	require.Equal(t, 0, n.focused)
+	require.Equal(t, 0, n.ctrl.FocusedIndex())
 
 	sendKey(t, n, "down")
 
-	require.Equal(t, 2, n.focused)
+	require.Equal(t, 2, n.ctrl.FocusedIndex())
 }
 
 func TestFocusMovement(t *testing.T) {
@@ -175,13 +175,13 @@ func TestFocusMovement(t *testing.T) {
 	_ = n.FocusFirst()
 
 	sendKey(t, n, "down")
-	require.Equal(t, 1, n.focused)
+	require.Equal(t, 1, n.ctrl.FocusedIndex())
 
 	sendKey(t, n, "down")
-	require.Equal(t, 2, n.focused)
+	require.Equal(t, 2, n.ctrl.FocusedIndex())
 
 	sendKey(t, n, "up")
-	require.Equal(t, 1, n.focused)
+	require.Equal(t, 1, n.ctrl.FocusedIndex())
 }
 
 func TestNestedNavigator_BoundaryAware_LeavesInner(t *testing.T) {
@@ -199,29 +199,29 @@ func TestNestedNavigator_BoundaryAware_LeavesInner(t *testing.T) {
 	_ = outer.FocusFirst()
 	sendKey(t, outer, "down") // focus inner -> Echo
 
-	require.Equal(t, 1, outer.focused)
-	require.Equal(t, 0, inner.focused)
+	require.Equal(t, 1, outer.ctrl.FocusedIndex())
+	require.Equal(t, 0, inner.ctrl.FocusedIndex())
 
 	// Move to Golf (last inner item).
 	sendKey(t, outer, "down")
 	sendKey(t, outer, "down")
-	require.Equal(t, 2, inner.focused)
+	require.Equal(t, 2, inner.ctrl.FocusedIndex())
 
 	// Down at inner boundary should move focus to Bravo.
 	sendKey(t, outer, "down")
-	require.Equal(t, 2, outer.focused)
-	require.True(t, outer.rows[2].(*testItem).focused)
+	require.Equal(t, 2, outer.ctrl.FocusedIndex())
+	require.True(t, outer.ctrl.Items()[2].(*testItem).focused)
 
 	// Up from Bravo moves back into the inner navigator. Navigate to its first
 	// item, then one more up crosses the inner boundary to Alpha.
 	sendKey(t, outer, "up") // Bravo -> Golf
 	sendKey(t, outer, "up") // Golf -> Foxtrot
 	sendKey(t, outer, "up") // Foxtrot -> Echo
-	require.Equal(t, 1, outer.focused)
-	require.Equal(t, 0, inner.focused)
+	require.Equal(t, 1, outer.ctrl.FocusedIndex())
+	require.Equal(t, 0, inner.ctrl.FocusedIndex())
 
 	sendKey(t, outer, "up") // Echo boundary -> Alpha
-	require.Equal(t, 0, outer.focused)
+	require.Equal(t, 0, outer.ctrl.FocusedIndex())
 }
 
 func TestNestedNavigator_BoundaryAware_OuterBoundaryScrolls(t *testing.T) {
@@ -235,22 +235,22 @@ func TestNestedNavigator_BoundaryAware_OuterBoundaryScrolls(t *testing.T) {
 		inner,
 		testLabel("footer"),
 	)
-	outer.ViewportCoordinator().SetHeight(2)
+	outer.ViewportController().SetHeight(2)
 	_ = outer.FocusFirst()
 	sendKey(t, outer, "down") // focus inner -> Echo
 
-	require.Equal(t, 1, outer.focused)
+	require.Equal(t, 1, outer.ctrl.FocusedIndex())
 
 	// Move to Foxtrot (last inner item).
 	sendKey(t, outer, "down")
-	require.Equal(t, 1, inner.focused)
+	require.Equal(t, 1, inner.ctrl.FocusedIndex())
 
 	// Down at inner boundary. Outer has no focusable below inner, so focus stays
 	// on Foxtrot and the viewport scrolls to reveal the footer.
 	sendKey(t, outer, "down")
-	require.Equal(t, 1, outer.focused)
-	require.Equal(t, 1, inner.focused)
-	require.Equal(t, 2, outer.ViewportCoordinator().YOffset())
+	require.Equal(t, 1, outer.ctrl.FocusedIndex())
+	require.Equal(t, 1, inner.ctrl.FocusedIndex())
+	require.Equal(t, 2, outer.ViewportController().YOffset())
 }
 
 func TestNestedNavigator_DelegatesToOuter(t *testing.T) {
@@ -270,7 +270,7 @@ func TestNestedNavigator_DelegatesToOuter(t *testing.T) {
 	_ = outer.FocusFirst()
 	sendKey(t, outer, "down") // focus inner
 
-	require.Equal(t, 1, outer.focused)
+	require.Equal(t, 1, outer.ctrl.FocusedIndex())
 
 	// First down inside inner moves to Foxtrot.
 	sendKey(t, outer, "down")
@@ -278,7 +278,7 @@ func TestNestedNavigator_DelegatesToOuter(t *testing.T) {
 
 	// Second down causes inner to defocus; outer moves to Bravo.
 	sendKey(t, outer, "down")
-	require.Equal(t, 2, outer.focused)
+	require.Equal(t, 2, outer.ctrl.FocusedIndex())
 }
 
 var defocusKeyDown = key.NewBinding(

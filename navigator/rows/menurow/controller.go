@@ -5,7 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// Mode controls how a [Collection] responds to activation keys.
+// Mode controls how a [Controller] responds to activation keys.
 type Mode int
 
 const (
@@ -18,10 +18,10 @@ const (
 	ModeMultiSelect
 )
 
-// Collection manages a set of menu rows, their marks, and activation keys. It
+// Controller manages a set of menu rows, their marks, and activation keys. It
 // is the controller for its rows: rows are data sources and transparently
-// forward keys to the collection.
-type Collection[T comparable] struct {
+// forward keys to the controller.
+type Controller[T comparable] struct {
 	mode         Mode
 	rows         []*Model[T]
 	marked       map[int]struct{}
@@ -30,34 +30,34 @@ type Collection[T comparable] struct {
 	markKey      key.Binding
 }
 
-// CollectionOption configures a [Collection].
-type CollectionOption[T comparable] func(*Collection[T])
+// ControllerOption configures a [Controller].
+type ControllerOption[T comparable] func(*Controller[T])
 
-// WithMode sets the collection's selection mode.
-func WithMode[T comparable](mode Mode) CollectionOption[T] {
-	return func(c *Collection[T]) {
+// WithMode sets the controller's selection mode.
+func WithMode[T comparable](mode Mode) ControllerOption[T] {
+	return func(c *Controller[T]) {
 		c.mode = mode
 	}
 }
 
 // WithSelectKeys sets the key binding that selects the focused row.
-func WithSelectKeys[T comparable](keys ...string) CollectionOption[T] {
-	return func(c *Collection[T]) {
+func WithSelectKeys[T comparable](keys ...string) ControllerOption[T] {
+	return func(c *Controller[T]) {
 		c.selectKey = key.NewBinding(key.WithKeys(keys...), key.WithHelp(keys[0], "select"))
 	}
 }
 
 // WithMarkKeys sets the key binding that toggles the focused row's mark in
 // [ModeMultiSelect].
-func WithMarkKeys[T comparable](keys ...string) CollectionOption[T] {
-	return func(c *Collection[T]) {
+func WithMarkKeys[T comparable](keys ...string) ControllerOption[T] {
+	return func(c *Controller[T]) {
 		c.markKey = key.NewBinding(key.WithKeys(keys...), key.WithHelp(keys[0], "mark"))
 	}
 }
 
-// NewCollection creates a collection over the given rows and applies options.
-func NewCollection[T comparable](rows []*Model[T], opts ...CollectionOption[T]) *Collection[T] {
-	c := &Collection[T]{
+// NewController creates a controller over the given rows and applies options.
+func NewController[T comparable](rows []*Model[T], opts ...ControllerOption[T]) *Controller[T] {
+	c := &Controller[T]{
 		rows:         rows,
 		marked:       make(map[int]struct{}),
 		focusedIndex: -1,
@@ -66,7 +66,7 @@ func NewCollection[T comparable](rows []*Model[T], opts ...CollectionOption[T]) 
 	}
 
 	for i, r := range rows {
-		r.collection = c
+		r.controller = c
 		r.index = i
 	}
 
@@ -77,35 +77,40 @@ func NewCollection[T comparable](rows []*Model[T], opts ...CollectionOption[T]) 
 	return c
 }
 
-// Rows returns the rows in the collection.
-func (c *Collection[T]) Rows() []*Model[T] {
+// Rows returns the rows in the controller.
+func (c *Controller[T]) Rows() []*Model[T] {
 	return c.rows
 }
 
 // FocusedIndex returns the index of the row that currently has focus, or -1 if
-// none of the collection's rows are focused.
-func (c *Collection[T]) FocusedIndex() int {
+// none of the controller's rows are focused.
+func (c *Controller[T]) FocusedIndex() int {
 	return c.focusedIndex
 }
 
 // setFocused records that the row at idx has received focus.
-func (c *Collection[T]) setFocused(idx int) {
+func (c *Controller[T]) setFocused(idx int) {
 	c.focusedIndex = idx
 }
 
 // clearFocus records that the row at idx has lost focus, but only if it was
 // the currently focused row.
-func (c *Collection[T]) clearFocus(idx int) {
+func (c *Controller[T]) clearFocus(idx int) {
 	if c.focusedIndex == idx {
 		c.focusedIndex = -1
 	}
 }
 
-// updateForRow handles keys forwarded by a row. It returns a command if the key
+// Update handles keys forwarded by a row. It returns a command if the key
 // activated the row, or nil if the key was ignored.
-func (c *Collection[T]) updateForRow(row *Model[T], msg tea.Msg) tea.Cmd {
+func (c *Controller[T]) Update(msg tea.Msg) tea.Cmd {
 	km, ok := msg.(tea.KeyMsg)
-	if !ok || !row.Focused() || c.focusedIndex != row.index {
+	if !ok || c.focusedIndex < 0 {
+		return nil
+	}
+
+	row := c.rows[c.focusedIndex]
+	if !row.Focused() {
 		return nil
 	}
 
@@ -124,7 +129,7 @@ func (c *Collection[T]) updateForRow(row *Model[T], msg tea.Msg) tea.Cmd {
 }
 
 // Mark marks the row at index. Out-of-range indices are ignored.
-func (c *Collection[T]) Mark(index int) {
+func (c *Controller[T]) Mark(index int) {
 	if !c.valid(index) {
 		return
 	}
@@ -134,7 +139,7 @@ func (c *Collection[T]) Mark(index int) {
 }
 
 // Unmark unmarks the row at index. Out-of-range indices are ignored.
-func (c *Collection[T]) Unmark(index int) {
+func (c *Controller[T]) Unmark(index int) {
 	if !c.valid(index) {
 		return
 	}
@@ -144,7 +149,7 @@ func (c *Collection[T]) Unmark(index int) {
 }
 
 // Toggle marks the row at index if it is unmarked, or unmarks it if marked.
-func (c *Collection[T]) Toggle(index int) {
+func (c *Controller[T]) Toggle(index int) {
 	if c.IsMarked(index) {
 		c.Unmark(index)
 
@@ -155,13 +160,13 @@ func (c *Collection[T]) Toggle(index int) {
 }
 
 // MarkOnly unmarks every row and then marks the row at index.
-func (c *Collection[T]) MarkOnly(index int) {
+func (c *Controller[T]) MarkOnly(index int) {
 	c.UnmarkAll()
 	c.Mark(index)
 }
 
 // UnmarkAll clears every mark.
-func (c *Collection[T]) UnmarkAll() {
+func (c *Controller[T]) UnmarkAll() {
 	for index := range c.marked {
 		c.rows[index].SetMarked(false)
 	}
@@ -170,7 +175,7 @@ func (c *Collection[T]) UnmarkAll() {
 }
 
 // Marked returns the indices of all marked rows in ascending order.
-func (c *Collection[T]) Marked() []int {
+func (c *Controller[T]) Marked() []int {
 	indices := make([]int, 0, len(c.marked))
 
 	for i := range c.rows {
@@ -183,7 +188,7 @@ func (c *Collection[T]) Marked() []int {
 }
 
 // MarkedValues returns the values of all marked rows in ascending index order.
-func (c *Collection[T]) MarkedValues() []T {
+func (c *Controller[T]) MarkedValues() []T {
 	values := make([]T, 0, len(c.marked))
 
 	for i := range c.rows {
@@ -196,7 +201,7 @@ func (c *Collection[T]) MarkedValues() []T {
 }
 
 // IsMarked reports whether the row at index is marked.
-func (c *Collection[T]) IsMarked(index int) bool {
+func (c *Controller[T]) IsMarked(index int) bool {
 	if !c.valid(index) {
 		return false
 	}
@@ -205,6 +210,6 @@ func (c *Collection[T]) IsMarked(index int) bool {
 }
 
 // valid reports whether index is inside the rows slice.
-func (c *Collection[T]) valid(index int) bool {
+func (c *Controller[T]) valid(index int) bool {
 	return index >= 0 && index < len(c.rows)
 }

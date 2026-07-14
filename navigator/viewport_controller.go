@@ -1,6 +1,6 @@
 package navigator
 
-// Viewport is the minimal surface a [ViewportCoordinator] needs to render a
+// Viewport is the minimal surface a [ViewportController] needs to render a
 // clipped view. The standard use case is a pointer to a scrollview Model.
 type Viewport interface {
 	SetContent(content string)
@@ -9,22 +9,22 @@ type Viewport interface {
 	View() string
 }
 
-// ViewportCoordinator sits between a [Model] and an external viewport. It tracks
+// ViewportController sits between a [Model] and an external viewport. It tracks
 // the viewport height and scroll offset and adjusts the offset so the focused
 // row stays visible, including one-line-at-a-time scrolling at the first/last
 // focusable row to reveal non-focusable content beyond the boundary.
-type ViewportCoordinator struct {
+type ViewportController struct {
 	height   int
 	yOffset  int
 	viewport Viewport
 	nav      *Model
 }
 
-// NewViewportCoordinator creates a ViewportCoordinator with zero height for nav.
+// NewViewportController creates a ViewportController with zero height for nav.
 // Set the height with [SetHeight] before use, and optionally attach a viewport
 // with [SetViewport].
-func NewViewportCoordinator(nav *Model) *ViewportCoordinator {
-	return &ViewportCoordinator{
+func NewViewportController(nav *Model) *ViewportController {
+	return &ViewportController{
 		height:   0,
 		yOffset:  0,
 		viewport: nil,
@@ -34,7 +34,7 @@ func NewViewportCoordinator(nav *Model) *ViewportCoordinator {
 
 // SetHeight sets the viewport height in lines. When a viewport is attached its
 // height is kept in sync.
-func (c *ViewportCoordinator) SetHeight(h int) {
+func (c *ViewportController) SetHeight(h int) {
 	c.height = max(h, 0)
 
 	if c.viewport != nil {
@@ -43,21 +43,21 @@ func (c *ViewportCoordinator) SetHeight(h int) {
 }
 
 // Height returns the configured viewport height.
-func (c *ViewportCoordinator) Height() int {
+func (c *ViewportController) Height() int {
 	return c.height
 }
 
 // YOffset returns the current top line of the visible viewport. The parent
 // should apply this offset to the paired viewport (e.g. via SetYOffset), or it
 // can attach the viewport with [SetViewport] and let the coordinator render it.
-func (c *ViewportCoordinator) YOffset() int {
+func (c *ViewportController) YOffset() int {
 	return c.yOffset
 }
 
 // SetYOffset sets the top line of the visible viewport. The offset is clamped
 // to be non-negative; it is further constrained to the content bounds on the
 // next scroll operation.
-func (c *ViewportCoordinator) SetYOffset(y int) {
+func (c *ViewportController) SetYOffset(y int) {
 	c.yOffset = max(y, 0)
 
 	if c.viewport != nil {
@@ -67,7 +67,7 @@ func (c *ViewportCoordinator) SetYOffset(y int) {
 
 // SetViewport attaches a viewport. Once attached, height and offset changes are
 // forwarded automatically and [View] renders the clipped viewport content.
-func (c *ViewportCoordinator) SetViewport(v Viewport) {
+func (c *ViewportController) SetViewport(v Viewport) {
 	c.viewport = v
 
 	if v != nil {
@@ -79,7 +79,7 @@ func (c *ViewportCoordinator) SetViewport(v Viewport) {
 // View syncs the attached viewport with the navigator's current View() output
 // and renders it with the current content offset. If no viewport is attached it
 // returns an empty string.
-func (c *ViewportCoordinator) View() string {
+func (c *ViewportController) View() string {
 	if c.viewport == nil {
 		return ""
 	}
@@ -93,7 +93,7 @@ func (c *ViewportCoordinator) View() string {
 
 // SetContent updates the attached viewport content. It is a no-op when no
 // viewport is attached.
-func (c *ViewportCoordinator) SetContent(content string) {
+func (c *ViewportController) SetContent(content string) {
 	if c.viewport != nil {
 		c.viewport.SetContent(content)
 	}
@@ -102,12 +102,12 @@ func (c *ViewportCoordinator) SetContent(content string) {
 // ScrollToFocus adjusts yOffset so the current cursor line is visible. It
 // scrolls the minimum amount: the cursor lands at the top edge when it moves
 // above the viewport and at the bottom edge when it moves below.
-func (c *ViewportCoordinator) ScrollToFocus(nav *Model) {
+func (c *ViewportController) ScrollToFocus(nav *Model) {
 	c.scrollToFocus(nav.CursorLine(), nav.totalLines())
 }
 
 // scrollToFocus is the internal implementation of ScrollToFocus.
-func (c *ViewportCoordinator) scrollToFocus(cursor, total int) {
+func (c *ViewportController) scrollToFocus(cursor, total int) {
 	if c.height <= 0 {
 		return
 	}
@@ -137,7 +137,7 @@ func (c *ViewportCoordinator) scrollToFocus(cursor, total int) {
 // scrollAtBoundary scrolls the viewport one line in dir when focus is already
 // at the boundary and cannot move. In open mode this reveals non-focusable
 // content above/below the boundary while keeping the focused row visible.
-func (c *ViewportCoordinator) scrollAtBoundary(cursor, total, dir int) {
+func (c *ViewportController) scrollAtBoundary(cursor, total, dir int) {
 	if c.height <= 0 {
 		return
 	}
@@ -160,7 +160,7 @@ func (c *ViewportCoordinator) scrollAtBoundary(cursor, total, dir int) {
 
 // clampYOffset keeps yOffset within the current content bounds for the given
 // total line count. A negative total leaves yOffset unchanged.
-func (c *ViewportCoordinator) clampYOffset(total int) {
+func (c *ViewportController) clampYOffset(total int) {
 	if total < 0 {
 		return
 	}
@@ -175,7 +175,7 @@ func (c *ViewportCoordinator) clampYOffset(total int) {
 }
 
 // syncYOffset forwards the current offset to the attached viewport.
-func (c *ViewportCoordinator) syncYOffset() {
+func (c *ViewportController) syncYOffset() {
 	if c.viewport != nil {
 		c.viewport.SetYOffset(c.yOffset)
 	}

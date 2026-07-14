@@ -4,6 +4,7 @@ linters:
   disable:
     - depguard
     - ireturn
+    - paralleltest
     - unparam
     - wsl
   enable:

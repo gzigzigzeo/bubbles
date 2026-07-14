@@ -1,7 +1,6 @@
-// example exercises Navigator: non-focusable label rows, focusable and
-// disabled item rows, a closed outer Navigator (wraps at boundaries), an open
-// inner Navigator (defers boundary exit to outer), and a single external
-// viewport that scrolls to nav.CursorLine().
+// example demonstrates Navigator with button rows and a horizontal button stack.
+// Navigate with ↑/↓ or k/j, press a row with enter, and move between
+// buttons with ←/→ or h/l and press with enter.
 //
 // Run: go run ./navigator/example/
 package main
@@ -15,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/gzigzigzeo/bubbles/navigator"
+	"github.com/gzigzigzeo/bubbles/navigator/rows/button"
 	"github.com/gzigzigzeo/bubbles/scrollview"
 )
 
@@ -23,8 +23,6 @@ const (
 	defaultHeight = 7
 	heightPadding = 4
 )
-
-// ─── Row types ───────────────────────────────────────────────────────────────
 
 // label is a non-focusable, non-disableable display row.
 type label struct {
@@ -55,131 +53,15 @@ func (l label) View() tea.View {
 	return tea.NewView(l.style.Render(" " + l.text))
 }
 
-// item is a toggleable checkbox row; implements Focusable and Disableable.
-type item struct {
-	text     string
-	checked  bool
-	focused  bool
-	disabled bool
-	indent   string
+// selectMsg is emitted when a menu row is selected.
+type selectMsg struct {
+	Value string
 }
 
-// newItem creates a top-level, enabled item row.
-func newItem(text string) *item {
-	return &item{
-		text:     text,
-		checked:  false,
-		focused:  false,
-		disabled: false,
-		indent:   "",
-	}
+// pressMsg is emitted when a button is pressed.
+type pressMsg struct {
+	Label string
 }
-
-// newInnerItem creates an enabled item row indented for the inner navigator.
-func newInnerItem(text string) *item {
-	return &item{
-		text:     text,
-		checked:  false,
-		focused:  false,
-		disabled: false,
-		indent:   "  ",
-	}
-}
-
-// newDisabledItem creates a disabled item row.
-func newDisabledItem(text string) *item {
-	return &item{
-		text:     text,
-		checked:  false,
-		focused:  false,
-		disabled: true,
-		indent:   "",
-	}
-}
-
-// Init satisfies tea.Model.
-func (it *item) Init() tea.Cmd {
-	return nil
-}
-
-// Update toggles the checkbox when space is pressed while focused.
-func (it *item) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if !ok || !it.focused {
-		return it, nil
-	}
-
-	toggleKey := key.NewBinding(
-		key.WithKeys("space"),
-		key.WithHelp("space", "toggle"),
-	)
-	if key.Matches(keyMsg, toggleKey) {
-		it.checked = !it.checked
-	}
-
-	return it, nil
-}
-
-// View renders the cursor indicator, checkbox, and text.
-func (it *item) View() tea.View {
-	cursor := "  "
-	if it.focused {
-		cursor = "▶ "
-	}
-
-	check := "[ ]"
-	if it.checked {
-		check = "[✓]"
-	}
-
-	line := it.indent + " " + cursor + check + " " + it.text
-
-	if it.disabled {
-		line = lipgloss.NewStyle().Faint(true).Render(line)
-	}
-
-	return tea.NewView(line)
-}
-
-// Focus marks the item as focused.
-func (it *item) Focus() tea.Cmd {
-	it.focused = true
-
-	return nil
-}
-
-// Blur removes focus.
-func (it *item) Blur() tea.Cmd {
-	it.focused = false
-
-	return nil
-}
-
-// Focused reports focus state.
-func (it *item) Focused() bool {
-	return it.focused
-}
-
-// Enable marks the item as enabled.
-func (it *item) Enable() tea.Cmd {
-	it.disabled = false
-
-	return nil
-}
-
-// Disable marks the item as disabled.
-func (it *item) Disable() tea.Cmd {
-	it.disabled = true
-
-	return nil
-}
-
-// Disabled reports whether the item is disabled.
-func (it *item) Disabled() bool {
-	return it.disabled
-}
-
-// ─── Root model ──────────────────────────────────────────────────────────────
 
 // model is the root Bubble Tea model.
 type model struct {
@@ -189,46 +71,67 @@ type model struct {
 	titleStyle  lipgloss.Style
 	hintStyle   lipgloss.Style
 	cursorStyle lipgloss.Style
+	statusStyle lipgloss.Style
+	status      string
 }
 
 // newModel builds the demo.
 //
 // Outer navigator — open (focus stays at boundaries, viewport scrolls):
-//   - label row (non-focusable heading)
-//   - three item rows (Alpha, Beta, Delta)
-//   - one disabled item (Gamma — skipped by focus)
-//   - label row
-//   - inner open navigator (five items — defers boundary scroll to outer)
+//   - heading label
+//   - first group of selectable menu rows
+//   - heading label
+//   - second group of selectable menu rows
+//   - horizontal button stack with three buttons
 //
 // A single viewport (height=7) is attached to the navigator's internal
-// ViewportCoordinator. The coordinator keeps the viewport offset in sync on
+// ViewportController. The controller keeps the viewport offset in sync on
 // every update.
 func newModel() *model {
-	inner := navigator.New(
-		newInnerItem("Echo"),
-		newInnerItem("Foxtrot"),
-		newInnerItem("Golf"),
-		newInnerItem("Hotel"),
-		newInnerItem("India"),
-	)
-
 	sectionStyle := lipgloss.NewStyle().Faint(true)
 
-	outer := navigator.New(
-		newLabel("─ Items (outer navigator, closed) ─", sectionStyle),
-		newItem("Alpha"),
-		newItem("Beta"),
-		newDisabledItem("Gamma  (disabled — skipped by focus)"),
-		newItem("Delta"),
-		newLabel("─ Inner navigator (open) ─", sectionStyle),
-		inner,
+	firstGroup := []*menurow.Model[string]{
+		menurow.New("Alpha", "alpha", "First option", selectMsg{Value: "alpha"}),
+		menurow.New("Beta", "beta", "Second option", selectMsg{Value: "beta"}),
+		menurow.New("Gamma", "gamma", "Third option", selectMsg{Value: "gamma"}),
+	}
+	_ = menurow.NewController(firstGroup, menurow.WithMode[string](menurow.ModeSelect))
+
+	secondGroup := []*menurow.Model[string]{
+		menurow.New("Delta", "delta", "Fourth option", selectMsg{Value: "delta"}),
+		menurow.New("Epsilon", "epsilon", "Fifth option", selectMsg{Value: "epsilon"}),
+	}
+	_ = menurow.NewController(secondGroup, menurow.WithMode[string](menurow.ModeSelect))
+
+	buttonStack := button.NewStack(
+		button.New("Save", pressMsg{Label: "Save"}),
+		button.New("Cancel", pressMsg{Label: "Cancel"}),
+		button.New("Help", pressMsg{Label: "Help"}),
 	)
+	buttonStack.SetStyles(button.StackStyles{
+		Wrapper: lipgloss.NewStyle().MarginTop(1),
+	})
+
+	teaRows := make([]tea.Model, 0,
+		1+len(firstGroup)+1+len(secondGroup)+1,
+	)
+	teaRows = append(teaRows, newLabel("─ Group 1 ─", sectionStyle))
+	for _, r := range firstGroup {
+		teaRows = append(teaRows, r)
+	}
+	teaRows = append(teaRows, newLabel("─ Group 2 ─", sectionStyle))
+	for _, r := range secondGroup {
+		teaRows = append(teaRows, r)
+	}
+	teaRows = append(teaRows, buttonStack)
+
+	outer := navigator.New(teaRows...)
 
 	viewport := scrollview.New()
 	viewport.SetWidth(defaultWidth)
 
-	outer.ViewportCoordinator().SetHeight(defaultHeight)
-	outer.ViewportCoordinator().SetViewport(&viewport)
+	outer.ViewportController().SetHeight(defaultHeight)
+	outer.ViewportController().SetViewport(&viewport)
 
 	return &model{
 		nav:         outer,
@@ -237,6 +140,7 @@ func newModel() *model {
 		titleStyle:  lipgloss.NewStyle().Bold(true).MarginBottom(1),
 		hintStyle:   lipgloss.NewStyle().Faint(true).MarginTop(1),
 		cursorStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		statusStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#53d1ff")),
 	}
 }
 
@@ -247,16 +151,26 @@ func (m *model) Init() tea.Cmd {
 
 // Update routes messages to the navigator.
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if km, ok := msg.(tea.KeyMsg); ok {
+	switch msg := msg.(type) {
+	case selectMsg:
+		m.status = fmt.Sprintf("Selected: %s", msg.Value)
+
+		return m, nil
+
+	case pressMsg:
+		m.status = fmt.Sprintf("Pressed: %s", msg.Label)
+
+		return m, nil
+
+	case tea.KeyMsg:
 		quitKey := key.NewBinding(key.WithKeys("q"))
-		if key.Matches(km, quitKey) {
+		if key.Matches(msg, quitKey) {
 			return m, tea.Quit
 		}
-	}
 
-	if ws, ok := msg.(tea.WindowSizeMsg); ok {
-		m.maxHeight = max(1, ws.Height-heightPadding)
-		m.viewport.SetWidth(ws.Width)
+	case tea.WindowSizeMsg:
+		m.maxHeight = max(1, msg.Height-heightPadding)
+		m.viewport.SetWidth(msg.Width)
 		m.syncViewportHeight()
 
 		return m, nil
@@ -279,21 +193,29 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) View() tea.View {
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		m.titleStyle.Render("Navigator Demo"),
-		m.nav.ViewportCoordinator().View(),
+		m.nav.ViewportController().View(),
 		"",
 		m.cursorStyle.Render(fmt.Sprintf("cursor line: %d", m.nav.CursorLine())),
-		m.hintStyle.Render("↑/↓/k/j: navigate   space: toggle   q: quit"),
+		m.hintStyle.Render("↑/↓/k/j: navigate   enter: select   ←/→/h/l: buttons   q: quit"),
 	)
+
+	if m.status != "" {
+		content = lipgloss.JoinVertical(
+			lipgloss.Left,
+			content,
+			m.statusStyle.Render(m.status),
+		)
+	}
 
 	return tea.NewView(content)
 }
 
-// syncViewportHeight sets the viewport and coordinator heights to the smaller
+// syncViewportHeight sets the viewport and controller heights to the smaller
 // of the available screen space and the navigator's current content height.
 func (m *model) syncViewportHeight() {
 	contentHeight := m.nav.Height()
 	h := max(1, min(m.maxHeight, contentHeight))
-	m.nav.ViewportCoordinator().SetHeight(h)
+	m.nav.ViewportController().SetHeight(h)
 }
 
 func main() {

@@ -60,37 +60,37 @@ func TestModel_New_panicsWhenMsgIsNil(t *testing.T) {
 	})
 }
 
-func TestModel_Focus_notifiesCollection(t *testing.T) {
+func TestModel_Focus_notifiesController(t *testing.T) {
 	rows := []*Model[string]{
 		New("Alpha", "alpha", "", "msg-a"),
 		New("Beta", "beta", "", "msg-b"),
 	}
-	c := NewCollection(rows)
+	c := NewController(rows)
 
 	_ = rows[1].Focus()
 
 	require.Equal(t, 1, c.FocusedIndex())
 }
 
-func TestModel_Blur_notifiesCollection(t *testing.T) {
+func TestModel_Blur_notifiesController(t *testing.T) {
 	rows := []*Model[string]{
 		New("Alpha", "alpha", "", "msg-a"),
 		New("Beta", "beta", "", "msg-b"),
 	}
-	_ = NewCollection(rows)
+	_ = NewController(rows)
 
 	_ = rows[0].Focus()
 	_ = rows[0].Blur()
 
-	require.Equal(t, -1, rows[0].collection.FocusedIndex())
+	require.Equal(t, -1, rows[0].controller.FocusedIndex())
 }
 
-func TestModel_Update_forwardsKeysToCollection(t *testing.T) {
+func TestModel_Update_forwardsKeysToController(t *testing.T) {
 	rows := []*Model[string]{
 		New("Alpha", "alpha", "", "msg-a"),
 		New("Beta", "beta", "", "msg-b"),
 	}
-	_ = NewCollection(rows)
+	_ = NewController(rows)
 
 	_ = rows[0].Focus()
 	_, cmd := rows[0].Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -103,7 +103,7 @@ func TestModel_Update_ignoresKeysWhenDisabled(t *testing.T) {
 	rows := []*Model[string]{
 		New("Alpha", "alpha", "", "msg-a"),
 	}
-	_ = NewCollection(rows)
+	_ = NewController(rows)
 
 	_ = rows[0].Focus()
 	_ = rows[0].Disable()
@@ -113,7 +113,7 @@ func TestModel_Update_ignoresKeysWhenDisabled(t *testing.T) {
 	require.Nil(t, cmd)
 }
 
-func TestModel_Update_ignoresKeysWhenNotInCollection(t *testing.T) {
+func TestModel_Update_ignoresKeysWhenNotInController(t *testing.T) {
 	m := New("Alpha", "alpha", "", "msg")
 	_ = m.Focus()
 

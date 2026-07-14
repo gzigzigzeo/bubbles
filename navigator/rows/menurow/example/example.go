@@ -31,14 +31,14 @@ type selectMsg struct {
 	Value string
 }
 
-// model is the example root. It owns the navigator and the menu row collection.
+// model is the example root. It owns the navigator and the menu row controller.
 type model struct {
 	nav        *navigator.Model
-	collection *menurow.Collection[string]
+	controller *menurow.Controller[string]
 	status     string
 }
 
-// newModel builds a navigator over a few menu rows and a collection to manage
+// newModel builds a navigator over a few menu rows and a controller to manage
 // their marks.
 func newModel() *model {
 	rows := []*menurow.Model[string]{
@@ -49,7 +49,7 @@ func newModel() *model {
 		menurow.New("Epsilon", "epsilon", "Last option", selectMsg{Value: "epsilon"}),
 	}
 
-	collection := menurow.NewCollection(rows, menurow.WithMode[string](menurow.ModeMultiSelect))
+	controller := menurow.NewController(rows, menurow.WithMode[string](menurow.ModeMultiSelect))
 
 	teaRows := make([]tea.Model, len(rows))
 	for i, r := range rows {
@@ -58,7 +58,7 @@ func newModel() *model {
 
 	return &model{
 		nav:        navigator.New(teaRows...),
-		collection: collection,
+		controller: controller,
 	}
 }
 

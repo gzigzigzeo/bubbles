@@ -11,7 +11,7 @@ import (
 // value, and the message to emit when the row is selected. It implements
 // [tea.Model], [row.Focusable], and [row.Disableable].
 //
-// A row is intended to be owned by a [Collection]. The collection handles
+// A row is intended to be owned by a [Controller]. The controller handles
 // activation keys and emits the row's configured message.
 type Model[T comparable] struct {
 	row.StatefulStyles[RowStyles]
@@ -24,11 +24,11 @@ type Model[T comparable] struct {
 	marked      bool
 	msg         tea.Msg // message emitted when the row is selected
 
-	collection *Collection[T]
+	controller *Controller[T]
 	index      int
 }
 
-// New creates a menu row. The msg is emitted by the owning [Collection] when
+// New creates a menu row. The msg is emitted by the owning [Controller] when
 // the row is focused and the user activates it. msg must not be nil.
 func New[T comparable](name string, value T, description string, msg tea.Msg) *Model[T] {
 	if msg == nil {
@@ -51,14 +51,14 @@ func (m *Model[T]) Init() tea.Cmd {
 	return nil
 }
 
-// Update forwards key messages to the owning [Collection]. All other messages
+// Update forwards key messages to the owning [Controller]. All other messages
 // are ignored.
 func (m *Model[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.collection == nil || m.Disabled() {
+	if m.controller == nil || m.Disabled() {
 		return m, nil
 	}
 
-	cmd := m.collection.updateForRow(m, msg)
+	cmd := m.controller.Update(msg)
 
 	return m, cmd
 }
@@ -108,23 +108,23 @@ func (m *Model[T]) Marked() bool {
 	return m.marked
 }
 
-// Focus marks the row as focused and notifies the owning [Collection].
+// Focus marks the row as focused and notifies the owning [Controller].
 func (m *Model[T]) Focus() tea.Cmd {
 	m.FocusedState.Focus()
 
-	if m.collection != nil {
-		m.collection.setFocused(m.index)
+	if m.controller != nil {
+		m.controller.setFocused(m.index)
 	}
 
 	return nil
 }
 
-// Blur removes focus from the row and notifies the owning [Collection].
+// Blur removes focus from the row and notifies the owning [Controller].
 func (m *Model[T]) Blur() tea.Cmd {
 	m.FocusedState.Blur()
 
-	if m.collection != nil {
-		m.collection.clearFocus(m.index)
+	if m.controller != nil {
+		m.controller.clearFocus(m.index)
 	}
 
 	return nil
