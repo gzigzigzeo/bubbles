@@ -1,16 +1,11 @@
-// Package navigator manages an ordered list of rows with keyboard focus.
 package navigator
-
-import (
-	tea "charm.land/bubbletea/v2"
-)
 
 // Viewport is the minimal surface a [ViewportCoordinator] needs to render a
 // clipped view. The standard use case is a pointer to a scrollview Model.
 type Viewport interface {
-	SetContent(string)
-	SetYOffset(int)
-	SetHeight(int)
+	SetContent(content string)
+	SetYOffset(offset int)
+	SetHeight(height int)
 	View() string
 }
 
@@ -22,13 +17,19 @@ type ViewportCoordinator struct {
 	height   int
 	yOffset  int
 	viewport Viewport
+	nav      *Model
 }
 
-// NewViewportCoordinator creates a ViewportCoordinator with zero height. Set the
-// height with [SetHeight] before use, and optionally attach a viewport with
-// [SetViewport].
-func NewViewportCoordinator() *ViewportCoordinator {
-	return &ViewportCoordinator{}
+// NewViewportCoordinator creates a ViewportCoordinator with zero height for nav.
+// Set the height with [SetHeight] before use, and optionally attach a viewport
+// with [SetViewport].
+func NewViewportCoordinator(nav *Model) *ViewportCoordinator {
+	return &ViewportCoordinator{
+		height:   0,
+		yOffset:  0,
+		viewport: nil,
+		nav:      nav,
+	}
 }
 
 // SetHeight sets the viewport height in lines. When a viewport is attached its
@@ -75,14 +76,19 @@ func (c *ViewportCoordinator) SetViewport(v Viewport) {
 	}
 }
 
-// View renders the attached viewport with the current content offset. If no
-// viewport is attached it returns an empty view.
-func (c *ViewportCoordinator) View() tea.View {
+// View syncs the attached viewport with the navigator's current View() output
+// and renders it with the current content offset. If no viewport is attached it
+// returns an empty string.
+func (c *ViewportCoordinator) View() string {
 	if c.viewport == nil {
-		return tea.View{}
+		return ""
 	}
 
-	return tea.NewView(c.viewport.View())
+	if c.nav != nil {
+		c.viewport.SetContent(c.nav.View().Content)
+	}
+
+	return c.viewport.View()
 }
 
 // SetContent updates the attached viewport content. It is a no-op when no

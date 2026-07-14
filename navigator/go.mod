@@ -6,11 +6,8 @@ require (
 	charm.land/bubbles/v2 v2.1.1
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.4
-	github.com/gzigzigzeo/bubbles/scrollview v0.0.0
 	github.com/stretchr/testify v1.11.1
 )
-
-replace github.com/gzigzigzeo/bubbles/scrollview => ../scrollview
 
 require (
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect

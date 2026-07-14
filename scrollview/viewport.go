@@ -70,6 +70,11 @@ func (m Model) Width() int {
 	return m.Model.Width() + lipgloss.Width(m.Styles.Track.Render())
 }
 
+// SetStyles replaces the scrollbar styles.
+func (m *Model) SetStyles(s Styles) {
+	m.Styles = s
+}
+
 // SetContent sets the viewport content. The line count is tracked for
 // scrollbar thumb placement.
 func (m *Model) SetContent(s string) {

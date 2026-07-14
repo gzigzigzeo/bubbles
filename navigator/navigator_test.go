@@ -3,10 +3,12 @@ package navigator
 import (
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
 )
 
 // testLabel is a non-focusable display row.
@@ -132,12 +134,12 @@ func TestOpenMode_KeepsFocusAtBoundaries(t *testing.T) {
 	require.True(t, n.IsAtLastFocusable())
 }
 
-func TestClosedMode_WrapsAtBoundaries(t *testing.T) {
+func TestWrapMode_WrapsAtBoundaries(t *testing.T) {
 	n := New(
 		&testItem{text: "Alpha"},
 		&testItem{text: "Beta"},
 	)
-	n.Closed()
+	n.Wrap()
 	_ = n.FocusFirst()
 
 	// Up at first should wrap to last.
@@ -301,7 +303,7 @@ func (d *defocusingNavigator) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.Matches(km, defocusKeyDown) && d.focused == len(d.rows)-1 {
-		if f, ok := d.rows[d.focused].(Focusable); ok {
+		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Blur()
 		}
 		d.focused = -1
@@ -309,11 +311,11 @@ func (d *defocusingNavigator) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.Matches(km, defocusKeyDown) && d.focused+1 < len(d.rows) {
-		if f, ok := d.rows[d.focused].(Focusable); ok {
+		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Blur()
 		}
 		d.focused++
-		if f, ok := d.rows[d.focused].(Focusable); ok {
+		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Focus()
 		}
 	}
@@ -332,7 +334,7 @@ func (d *defocusingNavigator) View() tea.View {
 
 func (d *defocusingNavigator) Focus() tea.Cmd {
 	d.focused = 0
-	if f, ok := d.rows[0].(Focusable); ok {
+	if f, ok := d.rows[0].(row.Focusable); ok {
 		_ = f.Focus()
 	}
 
@@ -341,7 +343,7 @@ func (d *defocusingNavigator) Focus() tea.Cmd {
 
 func (d *defocusingNavigator) Blur() tea.Cmd {
 	if d.focused >= 0 && d.focused < len(d.rows) {
-		if f, ok := d.rows[d.focused].(Focusable); ok {
+		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Blur()
 		}
 	}
@@ -360,7 +362,7 @@ func (d *defocusingNavigator) FocusFirst() tea.Cmd {
 
 func (d *defocusingNavigator) FocusLast() tea.Cmd {
 	d.focused = len(d.rows) - 1
-	if f, ok := d.rows[d.focused].(Focusable); ok {
+	if f, ok := d.rows[d.focused].(row.Focusable); ok {
 		_ = f.Focus()
 	}
 
@@ -373,4 +375,59 @@ func (d *defocusingNavigator) CursorLine() int {
 	}
 
 	return d.focused
+}
+
+// spaceItem is a focusable row that records whether it received a space key.
+type spaceItem struct {
+	text    string
+	focused bool
+	toggled bool
+}
+
+func (s *spaceItem) Init() tea.Cmd {
+	return nil
+}
+
+func (s *spaceItem) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok || !s.focused {
+		return s, nil
+	}
+
+	spaceKey := key.NewBinding(key.WithKeys("space"))
+	if key.Matches(km, spaceKey) {
+		s.toggled = true
+	}
+
+	return s, nil
+}
+
+func (s *spaceItem) View() tea.View {
+	return tea.NewView(s.text)
+}
+
+func (s *spaceItem) Focus() tea.Cmd {
+	s.focused = true
+
+	return nil
+}
+
+func (s *spaceItem) Blur() tea.Cmd {
+	s.focused = false
+
+	return nil
+}
+
+func (s *spaceItem) Focused() bool {
+	return s.focused
+}
+
+func TestSpaceForwardsToFocusedRow(t *testing.T) {
+	row := &spaceItem{text: "Alpha"}
+	n := New(testLabel("header"), row)
+	_ = n.FocusFirst()
+
+	sendKey(t, n, "space")
+
+	require.True(t, row.toggled)
 }
