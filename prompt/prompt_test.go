@@ -38,7 +38,7 @@ func subCmds(t *testing.T, cmd tea.Cmd) []tea.Cmd {
 	t.Helper()
 	require.NotNil(t, cmd)
 	batch, ok := cmd().(tea.BatchMsg)
-	require.True(t, ok, "expected a tea.BatchMsg")
+	require.True(t, ok)
 
 	return batch
 }
@@ -114,7 +114,7 @@ func TestPrompt_EnterWithDefaultEmitsRegisteredMsg(t *testing.T) {
 
 	msg := runCmd(cmd)
 	_, ok := msg.(prompt.YesMsg)
-	require.True(t, ok, "Enter with default should emit the default key's registered Msg")
+	require.True(t, ok)
 	require.NotNil(t, p.Value())
 	assert.Equal(t, 'Y', *p.Value())
 }
@@ -129,7 +129,7 @@ func TestPrompt_EnterWithoutDefaultIsInvalid(t *testing.T) {
 
 	_, cmd := p.Update(enterPress())
 	ik := findInvalidKeyMsg(subCmds(t, cmd))
-	require.NotNil(t, ik, "Enter without a default should be treated as an invalid key")
+	require.NotNil(t, ik)
 	assert.Equal(t, "enter", ik.Key)
 	assert.Nil(t, p.Value())
 }
@@ -145,7 +145,7 @@ func TestPrompt_AcceptByEnterFalseDisablesEnter(t *testing.T) {
 
 	_, cmd := p.Update(enterPress())
 	ik := findInvalidKeyMsg(subCmds(t, cmd))
-	require.NotNil(t, ik, "Enter should be treated as invalid when WithAcceptByEnter(false)")
+	require.NotNil(t, ik)
 	assert.Equal(t, "enter", ik.Key)
 	assert.Nil(t, p.Value())
 }
@@ -188,7 +188,7 @@ func TestPrompt_UnregisteredKeyEmitsInvalidKeyMsg(t *testing.T) {
 
 	_, cmd := p.Update(keyPress("x"))
 	ik := findInvalidKeyMsg(subCmds(t, cmd))
-	require.NotNil(t, ik, "expected InvalidKeyMsg")
+	require.NotNil(t, ik)
 	assert.Equal(t, "x", ik.Key)
 	assert.Equal(t, p, ik.Source)
 	assert.Nil(t, p.Value(), "invalid key must not set an answer")
@@ -281,7 +281,7 @@ func TestPrompt_KeyWithCustomMsgEmitsIt(t *testing.T) {
 	_, cmd := p.Update(keyPress("y"))
 	msg := runCmd(cmd)
 	cm, ok := msg.(testCustomMsg)
-	require.True(t, ok, "expected the key's custom Msg")
+	require.True(t, ok)
 	assert.Equal(t, "yes", cm.note)
 	require.NotNil(t, p.Value())
 	assert.Equal(t, 'y', *p.Value())
@@ -298,7 +298,7 @@ func TestPrompt_EnterDefaultEmitsKeysOwnMsg(t *testing.T) {
 	_, cmd := p.Update(enterPress())
 	msg := runCmd(cmd)
 	cm, ok := msg.(testCustomMsg)
-	require.True(t, ok, "Enter-triggered default should emit the default key's own registered Msg")
+	require.True(t, ok)
 	assert.Equal(t, "yes", cm.note)
 }
 
@@ -325,7 +325,7 @@ func TestPrompt_WithYesNoDefaultNoEmitsNoMsg(t *testing.T) {
 
 	_, cmd := p.Update(enterPress())
 	_, ok := runCmd(cmd).(prompt.NoMsg)
-	require.True(t, ok, "Enter with WithYesNoDefaultNo should emit NoMsg")
+	require.True(t, ok)
 	require.NotNil(t, p.Value())
 	assert.Equal(t, 'N', *p.Value())
 }

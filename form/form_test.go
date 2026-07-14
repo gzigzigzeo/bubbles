@@ -61,8 +61,8 @@ func TestForm_selectFieldScrollArrowRendersInGutterColumn(t *testing.T) {
 	sel := selectfield.NewFromStrings(opts)
 
 	f := form.New(form.WithEntry(form.NewField("select", sel)))
-	f.SetStyles(field.Styles{
-		Gutter:        lipgloss.NewStyle().Width(2),
+	f.SetStyles(form.Styles{
+		EmptyGutter:   lipgloss.NewStyle().Width(2),
 		CursorFocused: lipgloss.NewStyle().SetString("> "),
 		CursorBlurred: lipgloss.NewStyle().SetString("  "),
 	})
@@ -125,8 +125,8 @@ func TestForm_optionOrderIndependent(t *testing.T) {
 	f := form.New(
 		form.WithEntry(form.NewField("select", sel)),
 		field.WithWidth[*form.Model](40),
-		field.WithStyles[*form.Model](field.Styles{
-			Gutter:        lipgloss.NewStyle().Width(2),
+		form.WithStyles(form.Styles{
+			EmptyGutter:   lipgloss.NewStyle().Width(2),
 			CursorFocused: lipgloss.NewStyle().SetString("> "),
 			CursorBlurred: lipgloss.NewStyle().SetString("  "),
 		}),
@@ -177,8 +177,8 @@ func TestForm_layoutOptionsBeforeEntries(t *testing.T) {
 
 	f := form.New(
 		field.WithWidth[*form.Model](40),
-		field.WithStyles[*form.Model](field.Styles{
-			Gutter:        lipgloss.NewStyle().Width(2),
+		form.WithStyles(form.Styles{
+			EmptyGutter:   lipgloss.NewStyle().Width(2),
 			CursorFocused: lipgloss.NewStyle().SetString("> "),
 			CursorBlurred: lipgloss.NewStyle().SetString("  "),
 		}),
@@ -207,9 +207,10 @@ func TestForm_layoutOptionsBeforeEntries(t *testing.T) {
 		"scroll arrow must land in the gutter column even when WithWidth/WithStyles precede WithEntry")
 }
 
-// TestForm_buttonStackVerticalNavigationIsBoundedWithinStack verifies that
-// ↑/↓ navigate the stack's buttons but do not leave it at either boundary.
-func TestForm_buttonStackVerticalNavigationIsBoundedWithinStack(t *testing.T) {
+// TestForm_buttonStackVerticalNavigationExitsAtBoundary verifies that
+// ↑/↓ navigate between the stack's buttons and exit to the adjacent form
+// row when pressed at the first or last button.
+func TestForm_buttonStackVerticalNavigationExitsAtBoundary(t *testing.T) {
 	before := togglefield.New()
 	bs := buttonstack.New(button.New("First", nil), button.New("Second", nil))
 	after := togglefield.New()
@@ -224,29 +225,30 @@ func TestForm_buttonStackVerticalNavigationIsBoundedWithinStack(t *testing.T) {
 	f.Init()
 
 	f.Update(keyDown) // focus moves from "before" onto the button stack
-
 	require.True(t, bs.Focused(), "focus should land on the button stack")
 	require.Equal(t, 0, bs.Position(), "the first button should be focused initially")
 
-	f.Update(keyDown)
+	f.Update(keyDown) // move to second button within the stack
 	require.True(t, bs.Focused(), "↓ within the stack must move between buttons, not leave it")
 	require.Equal(t, 1, bs.Position())
 
-	f.Update(keyUp)
+	f.Update(keyUp) // move back to first button within the stack
 	require.True(t, bs.Focused(), "↑ within the stack must move between buttons, not leave it")
 	require.Equal(t, 0, bs.Position())
 
-	f.Update(keyUp) // bounded at the first button
+	f.Update(keyUp) // ↑ from first button exits the stack
+	require.False(t, bs.Focused(), "↑ from the first button should leave the stack")
+
+	f.Update(keyDown) // re-enter the stack from above
 	require.True(t, bs.Focused())
 	require.Equal(t, 0, bs.Position())
 
-	f.Update(keyDown) // move to the last button
+	f.Update(keyDown) // move to second button
 	require.True(t, bs.Focused())
 	require.Equal(t, 1, bs.Position())
 
-	f.Update(keyDown) // bounded at the last button
-	require.True(t, bs.Focused())
-	require.Equal(t, 1, bs.Position())
+	f.Update(keyDown) // ↓ from last button exits the stack
+	require.False(t, bs.Focused(), "↓ from the last button should leave the stack")
 }
 
 // TestForm_pickerScrollStableAfterCursorMove guards against syncScroll

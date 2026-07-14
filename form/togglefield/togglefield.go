@@ -19,8 +19,8 @@ type Model struct {
 	field.DisabledState
 	field.ValueState[bool]
 	field.NoopInit
-	field.NoopWidth
-	field.ZeroLeftPadding
+
+	width int
 }
 
 // Option configures a Model at construction time.
@@ -37,9 +37,14 @@ func New(opts ...Option) *Model {
 	return f
 }
 
-// Keys returns the select binding when enabled, nil when disabled.
+// SetWidth stores the field width used to pad the rendered value.
+func (f *Model) SetWidth(w int) {
+	f.width = w
+}
+
+// Keys returns the toggle binding.
 func (f *Model) Keys() []key.Binding {
-	return field.KeysIfEnabled(f, []key.Binding{keyToggle})
+	return []key.Binding{keyToggle}
 }
 
 // Update handles key events for the Model, toggling its value when the select key is pressed.
@@ -60,8 +65,8 @@ func (f *Model) View() tea.View {
 	s := f.StateStyles(f.Disabled(), f.Focused())
 
 	if f.Get() {
-		return tea.NewView(s.On.Render())
+		return tea.NewView(s.On.Width(f.width).Render())
 	}
 
-	return tea.NewView(s.Off.Render())
+	return tea.NewView(s.Off.Width(f.width).Render())
 }

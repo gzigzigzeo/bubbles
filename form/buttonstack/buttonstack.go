@@ -53,7 +53,7 @@ func (m *Model) Init() tea.Cmd {
 // Focus selects the first enabled button, if needed, then focuses it.
 func (m *Model) Focus() tea.Cmd {
 	if m.Current() == nil {
-		m.FocusFirst()
+		return tea.Batch(m.FocusFirst(), m.FocusState.Focus())
 	}
 
 	return m.FocusState.Focus()
@@ -96,22 +96,25 @@ func (m *Model) View() tea.View {
 }
 
 // Enable enables every entry.
-func (m *Model) Enable() {
+func (m *Model) Enable() tea.Cmd {
+	cmds := make([]tea.Cmd, 0, len(m.Items()))
+
 	for _, e := range m.Items() {
-		e.Enable()
+		cmds = append(cmds, e.Enable())
 	}
+
+	return tea.Batch(cmds...)
 }
 
 // Disable disables every entry.
-func (m *Model) Disable() {
-	for _, e := range m.Items() {
-		e.Disable()
-	}
-}
+func (m *Model) Disable() tea.Cmd {
+	cmds := make([]tea.Cmd, 0, len(m.Items()))
 
-// Enabled reports whether any entry is enabled.
-func (m *Model) Enabled() bool {
-	return !m.Disabled()
+	for _, e := range m.Items() {
+		cmds = append(cmds, e.Disable())
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // Disabled reports whether every entry is disabled.

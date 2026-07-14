@@ -1,5 +1,5 @@
 // Package form2 defines form rows as plain tea.Model values that optionally
-// implement field.Control, field.Sizeable, field.Validateable, and/or field.Hinted.
+// implement field.Control, Sizeable, field.Validateable, and/or field.Hinted.
 package form
 
 import (
@@ -8,6 +8,18 @@ import (
 
 	"github.com/gzigzigzeo/bubbles/form/field"
 )
+
+// Sizeable is implemented by entries that participate in the form's shared
+// label-column layout.
+type Sizeable interface {
+	Label() string
+	SetWidth(width int)
+	SetLayout(labelWidth int)
+
+	// Unwrap returns the entry's wrapped Field[T] for optional capability
+	// type-assertions Sizeable doesn't declare.
+	Unwrap() field.AnyField
+}
 
 // hintState holds hint text, implementing field.Hinted and the private
 // hintSetter constraint. Embedded by FieldEntry.
@@ -31,12 +43,11 @@ type FieldEntry[T any] struct {
 	field.Field[T]
 	hintState
 
-	label           string
-	err             string
-	validator       func(T) string
-	labelWidth      int
-	maxValuePadding int
-	styles          field.Styles
+	label      string
+	err        error
+	validator  func(T) string
+	labelWidth int
+	styles     Styles
 }
 
 // NewField creates a FieldEntry labeled label for f, applying opts in order.
@@ -69,13 +80,13 @@ func (e *FieldEntry[T]) Label() string {
 }
 
 // Err returns the entry's current validation error, set by Model.Validate.
-func (e *FieldEntry[T]) Err() string {
+func (e *FieldEntry[T]) Err() error {
 	return e.err
 }
 
 // SetErr sets the entry's current validation error. Used by Model.Validate.
-func (e *FieldEntry[T]) SetErr(msg string) {
-	e.err = msg
+func (e *FieldEntry[T]) SetErr(err error) {
+	e.err = err
 }
 
 // Unwrap returns the entry's wrapped field.Field[T] as a field.AnyField.
@@ -83,16 +94,14 @@ func (e *FieldEntry[T]) Unwrap() field.AnyField {
 	return e.Field
 }
 
-// SetLayout stores the label width and max value padding Model computed
-// across all sizeable entries.
-func (e *FieldEntry[T]) SetLayout(labelWidth, maxValuePadding int) {
+// SetLayout stores the label width Model computed across all sizeable entries.
+func (e *FieldEntry[T]) SetLayout(labelWidth int) {
 	e.labelWidth = labelWidth
-	e.maxValuePadding = maxValuePadding
 }
 
 // SetRowStyles stores the row-chrome styles (cursor, label, gutter, error)
 // Model pushes down whenever its own styles change.
-func (e *FieldEntry[T]) SetRowStyles(s field.Styles) {
+func (e *FieldEntry[T]) SetRowStyles(s Styles) {
 	e.styles = s
 }
 
@@ -119,12 +128,13 @@ func (e *FieldEntry[T]) View() tea.View {
 	cursorStr := cursor.String()
 	cursorW := lipgloss.Width(cursorStr)
 
-	padding := e.ValueLeftPadding()
-	label := labelStyle.Width(e.labelWidth - cursorW + e.maxValuePadding - padding).Render(e.label)
+	label := labelStyle.Width(e.labelWidth - cursorW).Render(e.label)
 
-	parts := []string{cursorStr, label, e.renderGutter(), e.Field.View().Content}
-	if e.err != "" {
-		parts = append(parts, e.styles.ErrText.Render(" "+e.err))
+	gutter := e.renderGutter()
+	parts := []string{cursorStr, label, gutter, e.Field.View().Content}
+
+	if e.err != nil {
+		parts = append(parts, e.styles.ErrText.Render(" "+e.err.Error()))
 	}
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
@@ -132,13 +142,12 @@ func (e *FieldEntry[T]) View() tea.View {
 	return tea.NewView(e.styles.Row.Render(content))
 }
 
-// renderGutter renders the gutter column, using field.LeftGutterAware when
-// the wrapped field supports it.
+// renderGutter renders the empty gutter column when the field does not own
+// the gutter, or returns "" when the field renders the gutter itself.
 func (e *FieldEntry[T]) renderGutter() string {
-	var content string
-	if lg, ok := e.Unwrap().(field.LeftGutterAware); ok {
-		content = lg.LeftGutter()
+	if go_, ok := e.Unwrap().(field.GutterOwner); ok && go_.OwnsGutter() {
+		return ""
 	}
 
-	return e.styles.Gutter.Render(content)
+	return e.styles.EmptyGutter.Render("")
 }

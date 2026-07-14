@@ -21,7 +21,7 @@ func TestKeysAlwaysIncludesNavigationBindings(t *testing.T) {
 		require.Len(t, bindings, 3)
 		require.Equal(t, keyLeft.Keys(), bindings[0].Keys())
 		require.Equal(t, keyRight.Keys(), bindings[1].Keys())
-		require.Equal(t, []string{"enter", " "}, bindings[2].Keys())
+		require.Equal(t, []string{"enter"}, bindings[2].Keys())
 	}
 }
 

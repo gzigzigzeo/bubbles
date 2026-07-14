@@ -46,9 +46,9 @@ func (b *Model) Init() tea.Cmd {
 	return nil
 }
 
-// Keys returns the activation binding when enabled, nil when disabled.
+// Keys returns the activation binding.
 func (b *Model) Keys() []key.Binding {
-	return field.KeysIfEnabled(b, []key.Binding{keyActivate})
+	return []key.Binding{keyActivate}
 }
 
 // Update processes key messages and returns the button's command when activated.

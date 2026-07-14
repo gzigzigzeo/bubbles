@@ -9,18 +9,17 @@ type DisabledState struct {
 }
 
 // Enable marks the component as enabled.
-func (d *DisabledState) Enable() {
+func (d *DisabledState) Enable() tea.Cmd {
 	d.disabled = false
+
+	return nil
 }
 
 // Disable marks the component as disabled.
-func (d *DisabledState) Disable() {
+func (d *DisabledState) Disable() tea.Cmd {
 	d.disabled = true
-}
 
-// Enabled returns true if the component is enabled.
-func (d *DisabledState) Enabled() bool {
-	return !d.disabled
+	return nil
 }
 
 // Disabled returns true if the component is disabled.
@@ -74,8 +73,10 @@ func (f *FocusedState) Focus() tea.Cmd {
 }
 
 // Blur sets the field as not focused.
-func (f *FocusedState) Blur() {
+func (f *FocusedState) Blur() tea.Cmd {
 	f.focused = false
+
+	return nil
 }
 
 // Focused returns true if the field is focused.
@@ -109,15 +110,6 @@ type NoopWidth struct{}
 
 // SetWidth is a no-op.
 func (NoopWidth) SetWidth(_ int) {
-}
-
-// ZeroLeftPadding is embedded by widget types with no left-side decoration
-// before their rendered value.
-type ZeroLeftPadding struct{}
-
-// ValueLeftPadding returns 0.
-func (ZeroLeftPadding) ValueLeftPadding() int {
-	return 0
 }
 
 // ValueState is a generic composable value holder.

@@ -5,15 +5,15 @@ import (
 )
 
 // FocusState manages keyboard focus over an ordered list of Controls,
-// shared by form2.Model and buttonstack.Model.
+// shared by form.Model and buttonstack.Model.
 type FocusState struct {
 	items    []Control
 	position int // index into items; -1 = none
 }
 
 // NewFocusState builds a FocusState over the Control-implementing subset of
-// models, in order; every other model is dropped. Call SelectFirst or
-// SelectLast once construction is complete to focus an initial item.
+// models, in order; every other model is dropped. Call FocusFirst or
+// FocusLast once construction is complete to focus an initial item.
 func NewFocusState[T tea.Model](models ...T) FocusState {
 	g := FocusState{position: -1}
 
@@ -34,7 +34,7 @@ func (g *FocusState) Items() []Control {
 // FocusFirst focuses the first non-disabled item, or none if every item is
 // disabled. Call once after construction, or to preselect the entry side
 // closest to where focus is entering from.
-func (g *FocusState) FocusFirst() {
+func (g *FocusState) FocusFirst() tea.Cmd {
 	g.position = -1
 
 	for i, it := range g.items {
@@ -43,11 +43,13 @@ func (g *FocusState) FocusFirst() {
 			break
 		}
 	}
+
+	return nil
 }
 
 // FocusLast focuses the last non-disabled item, or none if every item is
 // disabled. The mirror of FocusFirst, for focus entering from the end.
-func (g *FocusState) FocusLast() {
+func (g *FocusState) FocusLast() tea.Cmd {
 	g.position = -1
 
 	for i := len(g.items) - 1; i >= 0; i-- {
@@ -56,6 +58,8 @@ func (g *FocusState) FocusLast() {
 			break
 		}
 	}
+
+	return nil
 }
 
 // Focus focuses the current item.
@@ -68,10 +72,12 @@ func (g *FocusState) Focus() tea.Cmd {
 }
 
 // Blur blurs the current item.
-func (g *FocusState) Blur() {
+func (g *FocusState) Blur() tea.Cmd {
 	if n := g.Current(); n != nil {
-		n.Blur()
+		return n.Blur()
 	}
+
+	return nil
 }
 
 // Focused reports whether the current item is focused.
@@ -126,13 +132,17 @@ func (g *FocusState) shift(dir int, bounded bool) (tea.Cmd, bool) {
 		}
 
 		if n := g.Current(); n != nil {
-			n.Blur()
+			blurCmd := n.Blur()
+			g.position = pos
+			enterCmd := enterFrom(it, dir)
+
+			return tea.Batch(blurCmd, enterCmd, it.Focus()), true
 		}
 
 		g.position = pos
-		enterFrom(it, dir)
+		enterCmd := enterFrom(it, dir)
 
-		return it.Focus(), true
+		return tea.Batch(enterCmd, it.Focus()), true
 	}
 
 	return nil, false
@@ -159,29 +169,31 @@ func (g *FocusState) Set(i int) tea.Cmd {
 		return nil
 	}
 
+	var blurCmd tea.Cmd
+
 	if n := g.Current(); n != nil {
-		n.Blur()
+		blurCmd = n.Blur()
 	}
 
 	g.position = i
-	enterFrom(g.items[i], 1)
+	enterCmd := enterFrom(g.items[i], 1)
 
-	return g.items[i].Focus()
+	return tea.Batch(blurCmd, enterCmd, g.items[i].Focus())
 }
 
 // enterFrom preselects the correct end of a FocusModel control's own nested
 // focus, based on the direction focus is entering from: entering forward
 // (dir >= 0) lands on the child's first item, entering backward (dir < 0)
 // lands on its last. A no-op for controls that aren't FocusModel.
-func enterFrom(c Control, dir int) {
+func enterFrom(c Control, dir int) tea.Cmd {
 	n, ok := c.(FocusModel)
 	if !ok {
-		return
+		return nil
 	}
 
 	if dir < 0 {
-		n.SelectLast()
-	} else {
-		n.SelectFirst()
+		return n.FocusLast()
 	}
+
+	return n.FocusFirst()
 }

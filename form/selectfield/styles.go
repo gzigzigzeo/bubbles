@@ -30,12 +30,12 @@ func DefaultStyles() Styles {
 	return Styles{
 		Focused: SelectStyles{
 			Value:      dim,
-			ArrowLeft:  neon.SetString("◀ "),
-			ArrowRight: neon.SetString(" ▶"),
+			ArrowLeft:  neon.SetString("  ◀ "),
+			ArrowRight: neon.SetString("  ▶"),
 			Picker:     picker,
 		},
 		Blurred: SelectStyles{
-			Value:  dim,
+			Value:  dim.PaddingLeft(4),
 			Picker: picker,
 		},
 		Disabled: SelectStyles{

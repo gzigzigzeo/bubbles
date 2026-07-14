@@ -38,9 +38,11 @@ func (f *fakeScreen) Init() tea.Cmd {
 
 func (f *fakeScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	f.updateCalls++
+
 	if f.updateFunc != nil {
 		return f.updateFunc(msg)
 	}
+
 	return f, nil
 }
 
@@ -55,6 +57,7 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
 		return nil
 	}
+
 	return cmd()
 }
 
@@ -169,7 +172,7 @@ func TestUpdate_BackMsgNotPoppedWhenTopHandlesIt(t *testing.T) {
 
 	assert.Equal(t, 2, s.Len(), "stack must not pop when the top screen handles BackMsg itself")
 	assert.Same(t, child, s.Top())
-	require.NotNil(t, cmd, "the stack must forward the top screen's own command instead of discarding it")
+	require.NotNil(t, cmd)
 	assert.Equal(t, "child-handled-back", runCmd(cmd))
 }
 
@@ -193,7 +196,7 @@ func TestUpdate_BackMsgPopsAndInitsRevealedScreenWhenTopCannotGoBack(t *testing.
 
 	require.NotNil(t, cmd)
 	batch, ok := runCmd(cmd).(tea.BatchMsg)
-	require.True(t, ok, "expected a tea.BatchMsg combining noop and the revealed screen's Init()")
+	require.True(t, ok)
 	require.Len(t, batch, 2)
 
 	var sawRootInit bool

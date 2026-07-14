@@ -1,6 +1,7 @@
 package form
 
 import (
+	"errors"
 	"slices"
 
 	"charm.land/bubbles/v2/key"
@@ -29,14 +30,13 @@ type Model struct {
 	entries       []tea.Model          // every row, in call order; each renders via its own View()
 	focus         field.FocusState     // focusable subset, in call order, with the current focus index
 	focusableLine []int                // parallel to focus.Items(): entries-index each occupies, for scroll-into-view
-	sizeable      []field.Sizeable     // subset that participates in label-column layout
+	sizeable      []Sizeable           // subset that participates in label-column layout
 	validatable   []field.Validateable // subset that participates in Validate()
 
-	styles          field.Styles
-	labelWidth      int
-	maxValuePadding int
-	height          int
-	width           int // last content width passed to SetWidth; 0 = not yet called
+	styles     Styles
+	labelWidth int
+	height     int
+	width      int // last content width passed to SetWidth; 0 = not yet called
 
 	vp viewport.Model
 }
@@ -53,7 +53,7 @@ func (f *Model) appendEntry(m tea.Model) {
 		f.focusableLine = append(f.focusableLine, len(f.entries)-1)
 	}
 
-	if s, ok := m.(field.Sizeable); ok {
+	if s, ok := m.(Sizeable); ok {
 		f.sizeable = append(f.sizeable, s)
 	}
 
@@ -86,13 +86,20 @@ func New(opts ...Option) *Model {
 	return f
 }
 
+// rowStylesSetter is implemented by sizeable entries that accept row chrome styles.
+type rowStylesSetter interface {
+	SetRowStyles(s Styles)
+}
+
 // SetStyles replaces the chrome styles, pushing them to every sizeable
 // entry and redoing layout if SetWidth was already called.
-func (f *Model) SetStyles(s field.Styles) {
+func (f *Model) SetStyles(s Styles) {
 	f.styles = s
 
 	for _, e := range f.sizeable {
-		e.SetRowStyles(s)
+		if ss, ok := e.(rowStylesSetter); ok {
+			ss.SetRowStyles(s)
+		}
 	}
 
 	if f.width > 0 {
@@ -123,20 +130,16 @@ func (f *Model) applyWidth() {
 
 	f.labelWidth = slices.Max(labelLens) + 5
 
-	gutterWidth := lipgloss.Width(f.styles.Gutter.Render(""))
+	gutterWidth := lipgloss.Width(f.styles.EmptyGutter.Render(""))
 	fieldWidth := f.width - f.labelWidth - gutterWidth
 
-	f.maxValuePadding = 0
 	for _, e := range f.sizeable {
-		if p := e.ValueLeftPadding(); p > f.maxValuePadding {
-			f.maxValuePadding = p
+		w := fieldWidth
+		if go_, ok := e.Unwrap().(field.GutterOwner); ok && go_.OwnsGutter() {
+			w += gutterWidth
 		}
-	}
-
-	for _, e := range f.sizeable {
-		p := e.ValueLeftPadding()
-		e.SetWidth(fieldWidth - (f.maxValuePadding - p))
-		e.SetLayout(f.labelWidth, f.maxValuePadding)
+		e.SetWidth(w)
+		e.SetLayout(f.labelWidth)
 	}
 }
 
@@ -157,7 +160,7 @@ func (f *Model) syncFocusedHeight() {
 		return
 	}
 
-	s, ok := c.(field.Sizeable)
+	s, ok := c.(Sizeable)
 	if !ok {
 		return
 	}
@@ -226,28 +229,30 @@ func (f *Model) updateRows(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-// buildRows renders every entry via its own View(), in order, then the
-// focused entry's hint block (if it implements field.Hinted).
+// buildRows renders every entry via its own View(), in order.
 func (f *Model) buildRows() []string {
-	out := make([]string, 0, len(f.entries)+1)
+	out := make([]string, 0, len(f.entries))
 
 	for _, m := range f.entries {
 		out = append(out, m.View().Content)
 	}
 
-	hint := ""
+	return out
+}
 
+// RenderHint returns the focused entry's hint rendered with the form's hint
+// styles, or "" when there is no hint. Callers render this below the form
+// viewport so it stays visible regardless of scroll position.
+func (f *Model) RenderHint() string {
 	if c := f.focus.Current(); c != nil {
 		if h, ok := c.(field.Hinted); ok {
-			hint = h.Hint()
+			if hint := h.Hint(); hint != "" {
+				return f.styles.HintBlock.Render(f.styles.HintText.Render(hint))
+			}
 		}
 	}
 
-	if hint != "" {
-		out = append(out, f.styles.HintBlock.Render(f.styles.HintText.Render(hint)))
-	}
-
-	return out
+	return ""
 }
 
 // refreshContent pushes the freshly-rendered rows into the viewport, so
@@ -257,7 +262,7 @@ func (f *Model) refreshContent() {
 	f.vp.SetContent(lipgloss.JoinVertical(lipgloss.Left, f.buildRows()...))
 }
 
-// View renders every entry and the hint block into the viewport.
+// View renders every entry into the viewport.
 func (f *Model) View() string {
 	f.refreshContent()
 
@@ -281,10 +286,10 @@ func (f *Model) Validate() bool {
 	valid := true
 
 	for _, e := range f.validatable {
-		e.SetErr("")
+		e.SetErr(nil)
 
 		if msg := e.Validate(); msg != "" {
-			e.SetErr(msg)
+			e.SetErr(errors.New(msg))
 
 			valid = false
 		}
@@ -298,7 +303,7 @@ func (f *Model) Validate() bool {
 func (f *Model) FocusFirstError() tea.Cmd {
 	for i, c := range f.focus.Items() {
 		v, ok := c.(field.Validateable)
-		if !ok || v.Err() == "" {
+		if !ok || v.Err() == nil {
 			continue
 		}
 
@@ -354,7 +359,7 @@ func (f *Model) syncScroll() {
 
 	start, end := f.rowRange(i)
 
-	if s, ok := f.focus.Current().(field.Sizeable); ok {
+	if s, ok := f.focus.Current().(Sizeable); ok {
 		if ca, ok := s.Unwrap().(field.CursorAware); ok && end-start+1 > f.vp.Height() {
 			end = start + ca.CursorLine()
 		}
@@ -389,7 +394,7 @@ func (f *Model) focusedIsField() bool {
 		return false
 	}
 
-	_, ok := c.(field.Sizeable)
+	_, ok := c.(Sizeable)
 
 	return ok
 }

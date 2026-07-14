@@ -1,7 +1,5 @@
 package field
 
-import "charm.land/bubbles/v2/key"
-
 // styleSetter is implemented by widget types whose styles can be replaced wholesale.
 type styleSetter[S any] interface {
 	SetStyles(styles S)
@@ -26,13 +24,4 @@ func WithWidth[F widthSetter](w int) func(F) {
 	return func(f F) {
 		f.SetWidth(w)
 	}
-}
-
-// KeysIfEnabled returns bindings when d is enabled, nil otherwise.
-func KeysIfEnabled(d Disableable, bindings []key.Binding) []key.Binding {
-	if d.Disabled() {
-		return nil
-	}
-
-	return bindings
 }

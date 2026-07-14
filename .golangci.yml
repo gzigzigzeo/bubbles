@@ -1,0 +1,30 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - wsl
+  enable:
+    - wsl_v5
+  settings:
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+
+    # TODO: Review the following exclusions and re-enable them if possible.
+    # gosec:
+    #   excludes:
+    #     - G104 # ignoring errors on Close is acceptable
+    #     - G304 # well...
+
+    funcorder:
+      alphabetical: false
+
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+
+formatters:
+  enable:
+    - goimports

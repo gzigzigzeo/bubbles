@@ -10,13 +10,12 @@ import (
 	"github.com/gzigzigzeo/bubbles/form/field"
 )
 
-// State wraps a textinput.Model with StyledState, DisabledState, NoopInit,
-// and ZeroLeftPadding, shared by textfield.Model and numberfield.Model.
+// State wraps a textinput.Model with StyledState, DisabledState, and NoopInit,
+// shared by textfield.Model and numberfield.Model.
 type State struct {
 	field.StyledState[textinput.Styles]
 	field.DisabledState
 	field.NoopInit
-	field.ZeroLeftPadding
 
 	input  textinput.Model
 	filter func(tea.KeyMsg) bool
@@ -53,15 +52,19 @@ func (s *State) SetStyles(styles Styles) {
 }
 
 // Enable marks the field as enabled and pushes the active variant into the input.
-func (s *State) Enable() {
+func (s *State) Enable() tea.Cmd {
 	s.DisabledState.Enable()
 	s.input.SetStyles(s.StateStyles(s.Disabled(), s.Focused()))
+
+	return nil
 }
 
 // Disable marks the field as disabled and pushes the active variant into the input.
-func (s *State) Disable() {
+func (s *State) Disable() tea.Cmd {
 	s.DisabledState.Disable()
 	s.input.SetStyles(s.StateStyles(s.Disabled(), s.Focused()))
+
+	return nil
 }
 
 // Focus sets the underlying text input to be focused, allowing user input.
@@ -73,9 +76,11 @@ func (s *State) Focus() tea.Cmd {
 }
 
 // Blur removes focus from the underlying text input, preventing user input.
-func (s *State) Blur() {
+func (s *State) Blur() tea.Cmd {
 	s.input.Blur()
 	s.input.SetStyles(s.StateStyles(s.Disabled(), false))
+
+	return nil
 }
 
 // Focused returns true if the underlying text input is currently focused.

@@ -130,12 +130,11 @@ func TestSelectField_pickerRespectsAvailableHeightCeiling(t *testing.T) {
 		"rendered picker must never exceed the available height ceiling")
 }
 
-// TestSelectField_pickerCursorAlignsWithClosedArrow guards the actual bug
-// this field's LeftGutter/pickerRows split fixes: menu.Model bundles its
-// scroll indicator and cursor glyph into one composite gutter column per
-// row, which used to leave the picker's ▶ two columns right of where the
-// closed field's own ◀ sits. Peeling the scroll column off into LeftGutter
-// should leave ▶ flush at the same column as ◀.
+// TestSelectField_pickerCursorAlignsWithClosedArrow guards that when the
+// picker is open, the ▶ cursor glyph in dropdown rows lands at the same
+// column as the ◀ arrow in the closed inline row. The field owns its gutter
+// and prepends a scroll-indicator-width blank prefix to the inline row, so
+// both glyphs are offset by the same amount from the left edge.
 func TestSelectField_pickerCursorAlignsWithClosedArrow(t *testing.T) {
 	f := selectfield.NewFromStrings([]string{"a", "b", "c"})
 	f.Focus()
@@ -159,52 +158,11 @@ func TestSelectField_pickerCursorAlignsWithClosedArrow(t *testing.T) {
 	require.Equal(t, arrowCol, cursorCol, "picker cursor glyph must land in the same column as the closed field's arrow")
 }
 
-// TestSelectField_leftGutterLineCountMatchesView guards the invariant
-// LeftGutterAware documents: LeftGutter() must render exactly one line per
-// line of View().Content, in both the closed and open states, or form.Model's
-// lipgloss.JoinHorizontal silently desyncs the two columns.
-func TestSelectField_leftGutterLineCountMatchesView(t *testing.T) {
-	f := selectfield.NewFromStrings([]string{"a", "b", "c", "d", "e"})
-	f.Focus()
-	f.SetStyles(pickerStyles())
-	f.SetWidth(40)
-
-	require.Equal(t, lipgloss.Height(f.View().Content), lipgloss.Height(f.LeftGutter()),
-		"line counts must match while closed")
-
-	_, _ = f.Update(keyEnter) // open the picker
-
-	require.Equal(t, lipgloss.Height(f.View().Content), lipgloss.Height(f.LeftGutter()),
-		"line counts must match while open")
-}
-
-// TestSelectField_leftGutterShowsScrollArrows guards that the scroll
-// indicator actually reaches LeftGutter() rather than being dropped
-// entirely once peeled off the picker's own rows.
-func TestSelectField_leftGutterShowsScrollArrows(t *testing.T) {
-	opts := make([]string, 5)
-	for i := range opts {
-		opts[i] = fmt.Sprintf("opt%d", i)
-	}
-
-	f := selectfield.NewFromStrings(opts)
-	f.Focus()
-	f.SetStyles(pickerStyles())
-	f.SetWidth(40)
-	f.SetAvailableHeight(4) // forces a 2-row picker window, i.e. scrolling
-
-	_, _ = f.Update(keyEnter) // open; cursor on "opt0"
-
-	require.NotContains(t, f.View().Content, "▼", "scroll arrow must not remain in the field's own column")
-	require.Contains(t, f.LeftGutter(), "▼", "scroll-down arrow must appear in the peeled-off gutter instead")
-}
-
-// TestSelectField_setWidthCompensatesForGutter guards the load-bearing fix
-// in SetWidth: form.Model has already carved LeftGutter's width out of the
-// value it passes down, so SetWidth must add scrollWidth() back before
-// forwarding to the menu, or the picker's rows render narrower than the
-// width form.Model actually allocated to this field.
-func TestSelectField_setWidthCompensatesForGutter(t *testing.T) {
+// TestSelectField_setWidthFillsPickerRow guards that picker rows render at
+// the full allocated width. The field owns its gutter and receives
+// fieldWidth+gutterWidth from the form via SetWidth, which it passes
+// directly to the menu so rows fill the entire slot.
+func TestSelectField_setWidthFillsPickerRow(t *testing.T) {
 	f := selectfield.NewFromStrings([]string{strings.Repeat("x", 60)})
 	f.Focus()
 	f.SetStyles(pickerStyles())
@@ -225,5 +183,5 @@ func TestSelectField_setWidthCompensatesForGutter(t *testing.T) {
 	}
 	require.NotEmpty(t, dropdownLine, "an open picker must render its (only) row, carrying the cursor glyph")
 	require.Equal(t, w, lipgloss.Width(dropdownLine),
-		"picker row must fill the full width form.Model allocated to this field, not width-scrollWidth()")
+		"picker row must fill the full width allocated to this field")
 }

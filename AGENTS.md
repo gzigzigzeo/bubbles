@@ -1,0 +1,187 @@
+# Code Style
+
+## Methods
+
+- Every exported and unexported method must have a Go doc comment (`// MethodName ...`).
+- Never write single-line method bodies. Always use a multi-line block:
+  ```go
+  // Bad
+  func (f *Foo) Bar() string { return f.bar }
+
+  // Good
+  func (f *Foo) Bar() string {
+      return f.bar
+  }
+  ```
+
+## Struct Literals
+
+- When a struct literal has more than one field, put each field on its own line:
+  ```go
+  // Bad
+  form.Entry{Label: "Port", Hint: "...", Field: port}
+
+  // Good
+  form.Entry{
+      Label: "Port",
+      Hint:  "...",
+      Field: port,
+  }
+  ```
+
+## Functions
+
+Disallow one-liner syntax
+  ```go
+  // Bad
+  func (l Label) Text() string { return "" }
+
+  // Good
+  func (l Label) Text() string {
+    return ""
+  }
+  ```
+
+## Do not use tmux for debug
+
+Do not run any kind of visual debugging.
+
+## Add empty line } after block
+
+Add empty line after } block is closed (if, for exmaple) and before return statement.
+
+```go
+// Bad
+if x {
+    ...
+}
+return y
+
+// Good
+if x {
+    ...
+}
+
+return y
+```
+
+## Add empty line before if
+
+Add empty line before if statement if there is none.
+
+```go
+// Bad
+x := 1
+if x > 0 {
+    ...
+}
+
+// Good
+x := 1
+
+if x > 0 {
+    ...
+}
+```
+
+## Comment
+
+Limit comments to 2-3 lines max. Do not comment test methods, they should be self-explanatory.
+
+## Conditions
+
+Prefer guard clauses.
+
+```go
+// Bad
+for range i {
+  if i == 5 {
+    n := i * 2
+    n = math.Pow(n, 5)
+    return x
+  }
+}
+
+// Good
+for range i {
+  if i != 5 {
+    continue
+  }
+
+n := i * 2
+  n = math.Pow(n, 5)
+  return x
+}
+```
+
+## Keybindings
+
+Use `charm.land/bubbles/v2/key` bindings and `key.Matches` instead of comparing `tea.KeyMsg.String()`.
+
+```go
+// Bad
+switch km.String() {
+case "up", "k":
+    // ...
+}
+
+// Good
+var menuKeyUp = key.NewBinding(
+    key.WithKeys("up", "k"),
+    key.WithHelp("↑/k", "up"),
+)
+
+switch {
+case key.Matches(km, menuKeyUp):
+    // ...
+}
+```
+
+## Do not use \n and spaces in views
+
+Instead of `strings.Join(rows, "\n")` use `lipgloss.JoinVertical`
+Instead of strings.Repeat(" ", 5) define it as a style with Width.
+
+```go
+// Bad
+return tea.NewView(strings.Join(rows, "\n"))
+
+// Good
+return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, rows...))
+```
+
+```go
+// Bad
+return tea.NewView(strings.Repeat(" ", 5) + text)
+
+// Good
+style := lipgloss.NewStyle().Width(5) // Prefer existing styles
+
+return tea.NewView(style.Render(text))
+```
+
+## Don't use t.Fatalf in tests
+
+Instead, use require.*
+
+```go
+// Bad
+if got != want {
+    t.Fatalf("expected %d, got %d", want, got)
+}
+
+// Good
+require.Equal(t, want, got)
+```
+
+## Do not provide extra descriptions for require.* in tests
+
+Do not do that: require.Equal(x, 3, "description")
+
+```go
+// Bad
+require.Equal(t, want, got, "values should match")
+
+// Good
+require.Equal(t, want, got)
+```

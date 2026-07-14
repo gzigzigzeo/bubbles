@@ -1,6 +1,5 @@
-// Package menu provides a reusable cursor-driven list of choices, scrolled
-// by an embedded viewport.Model, for screens that need to present the user
-// with a list of named (and optionally described) options.
+// Package menu provides a cursor-driven list of named choices
+// scrolled by an embedded viewport.Model.
 package menu
 
 import (
@@ -39,19 +38,15 @@ type Option[T any] struct {
 	Value       T
 }
 
-// ChoiceMsg is the message a Menu fires when the user selects an option. Option
-// points at the Option itself, for callers that also want its
-// Name/Description alongside Value.
+// ChoiceMsg is fired when the user selects an option. Option
+// points at the Option alongside its Value.
 type ChoiceMsg[T any] struct {
 	Value  T
 	Option *Option[T]
 }
 
-// Model is a cursor-driven, optionally height-limited list of Options,
-// scrolled by an embedded viewport.Model. It exposes the key bindings it
-// responds to via Keys, but never renders a hint bar itself — callers own
-// that. T is constrained to comparable so the cursor can be positioned by
-// value (SetCursor/Cursor) instead of by index.
+// Model is a cursor-driven, optionally height-limited list of Options
+// scrolled by an embedded viewport.Model.
 type Model[T comparable] struct {
 	options         []Option[T]
 	widestNameWidth int // cached widestName(), recomputed only when options change
@@ -88,9 +83,8 @@ func (m *Model[T]) SetStyles(s Styles) {
 	m.scrollCursorIntoView()
 }
 
-// SetWidth sets the width of the menu's viewport and the width each row is
-// truncated to. w <= 0 resets to unlimited: rows are rendered at their
-// natural length, uncapped.
+// SetWidth sets the viewport and row truncation width.
+// w <= 0 resets to unlimited (rows rendered at natural length).
 func (m *Model[T]) SetWidth(w int) {
 	m.width = w
 	m.vp.SetWidth(w)
@@ -99,18 +93,16 @@ func (m *Model[T]) SetWidth(w int) {
 	m.scrollCursorIntoView()
 }
 
-// SetHeight limits how many option rows View() renders, scrolling
-// internally past that. h <= 0 resets to unlimited (every option shown, no
-// scrolling).
+// SetHeight limits how many option rows View() renders.
+// h <= 0 resets to unlimited (every option shown, no scrolling).
 func (m *Model[T]) SetHeight(h int) {
 	m.height = h
 	m.applyHeight()
 	m.scrollCursorIntoView()
 }
 
-// applyHeight resolves the configured height onto the viewport. h <= 0
-// means unlimited: every option is shown, recomputed fresh off the current
-// option count so it stays correct after SetOptions changes it.
+// applyHeight resolves the configured height onto the viewport.
+// h <= 0 means unlimited, recomputed from the current option count.
 func (m *Model[T]) applyHeight() {
 	h := m.height
 	if h <= 0 {
@@ -125,20 +117,14 @@ func (m *Model[T]) Cursor() T {
 	return m.options[m.cursor].Value
 }
 
-// CursorLine returns the 0-indexed line within View()'s rendered output that
-// the cursor is currently on, after the menu's own internal scrolling has
-// been applied. A caller embedding the menu inside a taller scrollable
-// container (e.g. Form) can use this to keep the cursor's actual line
-// visible as the user navigates, rather than the menu's full extent.
+// CursorLine returns the 0-indexed line of the cursor within View(),
+// after internal scrolling is applied.
 func (m *Model[T]) CursorLine() int {
 	return m.cursor - m.vp.YOffset()
 }
 
-// SetOptions replaces the menu's options, e.g. when a dependent field (such
-// as a chosen region or architecture) changes what should be selectable. The
-// cursor resets to the first option; the marker is left untouched, so
-// callers whose committed value no longer appears in the new list should
-// call SetMarker (or SetCursor) with a valid value afterwards.
+// SetOptions replaces the menu's options and resets the cursor to zero.
+// The marker is left untouched; call SetMarker/SetValue as needed.
 func (m *Model[T]) SetOptions(options []Option[T]) {
 	m.options = options
 	m.cursor = 0
@@ -148,11 +134,8 @@ func (m *Model[T]) SetOptions(options []Option[T]) {
 	m.scrollCursorIntoView()
 }
 
-// SetMarker marks the option whose Value equals value with
-// Styles.CursorMarked/LabelMarked instead of the normal blurred styling,
-// independent of the cursor — e.g. to show which value is currently
-// committed while the user browses elsewhere. Multiple markers aren't
-// supported; call it again to move the mark.
+// SetMarker marks the option matching value with CursorMarked/LabelMarked,
+// independent of the cursor. Call again to move the mark.
 func (m *Model[T]) SetMarker(value T) {
 	m.marker = value
 	m.hasMarker = true
@@ -190,12 +173,8 @@ func (m *Model[T]) setCursorIndex(i int) {
 	m.scrollCursorIntoView()
 }
 
-// scrollCursorIntoView scrolls the viewport by the minimum amount needed to
-// bring the cursor's row into view. Scrolling up reveals it at the window's
-// top (matching viewport.EnsureVisible's own behavior); scrolling down
-// reveals it at the window's bottom instead of making it the new top —
-// viewport.EnsureVisible always does the latter, which reads as a full-page
-// jump instead of a smooth one-row scroll.
+// scrollCursorIntoView scrolls the viewport the minimum amount needed
+// to bring the cursor's row into view.
 func (m *Model[T]) scrollCursorIntoView() {
 	line := m.cursor
 	height := m.vp.Height()
@@ -208,10 +187,8 @@ func (m *Model[T]) scrollCursorIntoView() {
 	}
 }
 
-// Keys returns the key bindings this menu responds to, for callers to
-// include in their own hint bar. It deliberately omits the viewport's bonus
-// PgUp/PgDn/mouse-wheel scrolling, which is a free enhancement rather than a
-// promised interaction.
+// Keys returns the key bindings this menu responds to,
+// for callers to include in their own hint bar.
 func (m *Model[T]) Keys() []key.Binding {
 	return []key.Binding{menuKeyUp, menuKeyDown, menuKeySelect}
 }
@@ -221,10 +198,8 @@ func (m *Model[T]) Init() tea.Cmd {
 	return m.vp.Init()
 }
 
-// Update moves the cursor on Up/Down (no wraparound) and fires a Choice[T]
-// for the selected option on Select. Every other message — including the
-// viewport's own PgUp/PgDn/mouse-wheel handling — is forwarded to the
-// embedded viewport.
+// Update moves the cursor on Up/Down and fires a ChoiceMsg on Select.
+// All other messages are forwarded to the embedded viewport.
 func (m *Model[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch {
@@ -245,9 +220,8 @@ func (m *Model[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// fireChoice returns a Cmd emitting a Choice[T] for the currently selected
-// option. The Option pointer is into m.options, which is never resized
-// after construction, so it stays valid for the Menu's lifetime.
+// fireChoice returns a Cmd emitting a ChoiceMsg for the currently
+// selected option.
 func (m *Model[T]) fireChoice() tea.Cmd {
 	opt := &m.options[m.cursor]
 	return func() tea.Msg { return ChoiceMsg[T]{Value: opt.Value, Option: opt} }
@@ -259,23 +233,14 @@ func (m *Model[T]) View() tea.View {
 	return tea.NewView(m.vp.View())
 }
 
-// gutter renders the leftmost column: the scroll indicator (ScrollUp on the
-// viewport's first visible line when there's content above it, ScrollDown
-// on the last visible line when there's content below, blank otherwise)
-// immediately followed by the cursor glyph (CursorFocused/CursorBlurred).
-// If the viewport is only one line tall, "scroll up" wins over "scroll
-// down" — an edge case not worth a second indicator on one row.
+// gutter renders the leftmost column: scroll indicator followed
+// by the cursor glyph (CursorFocused/CursorBlurred).
 func (m *Model[T]) gutter(ctx viewport.GutterContext) string {
 	return m.scrollIndicator(ctx) + m.cursorIndicator(ctx.Index)
 }
 
-// scrollIndicator returns ScrollUp/ScrollDown for the viewport's first/last
-// visible line when there's more content in that direction, or a same-width
-// blank otherwise. Uses Height() rather than VisibleLineCount() — the latter
-// calls back into maxWidth(), which itself probes LeftGutterFunc to measure
-// its width, causing infinite recursion. Height() is the configured height,
-// which equals the actual visible line count whenever there's enough
-// content to scroll (the only case the "more below" arrow can ever apply).
+// scrollIndicator returns ScrollUp/ScrollDown on the first/last visible line
+// when more content exists in that direction, or a same-width blank otherwise.
 func (m *Model[T]) scrollIndicator(ctx viewport.GutterContext) string {
 	last := m.vp.YOffset() + m.vp.Height() - 1
 
@@ -289,10 +254,8 @@ func (m *Model[T]) scrollIndicator(ctx viewport.GutterContext) string {
 	}
 }
 
-// cursorIndicator returns the cursor glyph for the currently-selected
-// option's line, CursorMarked if it's the marked option's line (and not the
-// cursor's), CursorBlurred otherwise, or a same-width blank if line is out
-// of range.
+// cursorIndicator returns the cursor glyph for the given line:
+// CursorFocused, CursorMarked, CursorBlurred, or a same-width blank.
 func (m *Model[T]) cursorIndicator(line int) string {
 	switch {
 	case line < 0 || line >= len(m.options):
@@ -328,11 +291,8 @@ func (m *Model[T]) syncNameWidth() {
 	}
 }
 
-// syncContent rebuilds every row, reflecting the current cursor position via
-// label color (the cursor glyph itself is rendered by gutter), and pushes
-// them into the viewport. Description is rendered at its natural length,
-// never wrapped; rows wider than the configured width are truncated with a
-// trailing ellipsis instead (see availableRowWidth).
+// syncContent rebuilds every row reflecting the current cursor position
+// and pushes them into the viewport.
 func (m *Model[T]) syncContent() {
 	widest := m.widestNameWidth
 	available := max(0, m.width-m.gutterWidth())
@@ -371,9 +331,7 @@ func (m *Model[T]) syncContent() {
 }
 
 // gutterWidth returns the rendered width of the leftmost gutter column
-// (scroll indicator immediately followed by the cursor glyph), matching
-// what gutter always produces regardless of which branch scrollIndicator/
-// cursorIndicator take on a given line.
+// (scroll indicator + cursor glyph).
 func (m *Model[T]) gutterWidth() int {
 	return lipgloss.Width(m.styles.ScrollUp.Render()) + lipgloss.Width(m.styles.CursorFocused.Render())
 }

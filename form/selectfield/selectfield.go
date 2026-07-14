@@ -6,7 +6,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gzigzigzeo/bubbles/form/field"
 	"github.com/gzigzigzeo/bubbles/menu"
@@ -65,15 +64,19 @@ func (f *Model[T]) SetStyles(styles Styles) {
 }
 
 // Enable marks the field as enabled and pushes the active picker variant into the menu.
-func (f *Model[T]) Enable() {
+func (f *Model[T]) Enable() tea.Cmd {
 	f.DisabledState.Enable()
 	f.menu.SetStyles(f.StateStyles(f.Disabled(), f.Focused()).Picker)
+
+	return nil
 }
 
 // Disable marks the field as disabled and pushes the active picker variant into the menu.
-func (f *Model[T]) Disable() {
+func (f *Model[T]) Disable() tea.Cmd {
 	f.DisabledState.Disable()
 	f.menu.SetStyles(f.StateStyles(f.Disabled(), f.Focused()).Picker)
+
+	return nil
 }
 
 // Focus marks the field as focused and pushes the focused picker variant into the menu.
@@ -85,9 +88,11 @@ func (f *Model[T]) Focus() tea.Cmd {
 }
 
 // Blur marks the field as blurred and pushes the blurred picker variant into the menu.
-func (f *Model[T]) Blur() {
+func (f *Model[T]) Blur() tea.Cmd {
 	f.FocusedState.Blur()
 	f.menu.SetStyles(f.StateStyles(f.Disabled(), false).Picker)
+
+	return nil
 }
 
 // SetAvailableHeight sets a ceiling on how many dropdown rows this field may render.
@@ -202,42 +207,24 @@ func (f *Model[T]) Set(value T) {
 	}
 }
 
-// ValueLeftPadding returns the rendered width of the left-arrow prefix, which
-// indents the displayed value from the left edge of the field slot.
-func (f *Model[T]) ValueLeftPadding() int {
-	return lipgloss.Width(f.StateStyles(f.Disabled(), f.Focused()).ArrowLeft.Render())
+// OwnsGutter returns true: this field renders the gutter column as part of
+// its own View content (scroll indicator on the left of each picker row,
+// blank gutter-width prefix on the closed inline row).
+func (f *Model[T]) OwnsGutter() bool {
+	return true
 }
 
-// SetWidth stores the inline-view width and passes it to the picker,
-// compensated by scrollWidth since the enclosing form has already carved
-// the LeftGutter column out of w (see field.LeftGutterAware).
+// SetWidth stores the total allocated width (field + gutter) and passes it
+// to the picker so picker rows fill the full slot.
 func (f *Model[T]) SetWidth(w int) {
 	f.width = w
-	f.menu.SetWidth(w + f.scrollWidth())
+	f.menu.SetWidth(w)
 }
 
-// scrollWidth returns the rendered width of the picker's scroll-position
-// indicator, the column width pickerRows peels off each dropdown row.
+// scrollWidth returns the visual width of the picker's scroll-position
+// indicator, which the field renders as the gutter prefix on every row.
 func (f *Model[T]) scrollWidth() int {
 	return lipgloss.Width(f.StateStyles(f.Disabled(), f.Focused()).Picker.ScrollUp.Render())
-}
-
-// pickerRows splits the picker's rendered lines at the scroll-indicator
-// column: fieldRows is the cursor glyph onward, gutterRows is the
-// scroll-indicator column alone, one line per visible dropdown row.
-func (f *Model[T]) pickerRows() (fieldRows, gutterRows []string) {
-	n := f.scrollWidth()
-	lines := strings.Split(f.menu.View().Content, "\n")
-
-	fieldRows = make([]string, len(lines))
-	gutterRows = make([]string, len(lines))
-
-	for i, line := range lines {
-		gutterRows[i] = ansi.Cut(line, 0, n)
-		fieldRows[i] = ansi.TruncateLeft(line, n, "")
-	}
-
-	return fieldRows, gutterRows
 }
 
 // Keys returns key bindings appropriate for the current state:
@@ -305,10 +292,14 @@ func (f *Model[T]) updatePicker(msg tea.KeyMsg) tea.Cmd {
 }
 
 // View renders the inline collapsed value when the picker is closed, or the
-// inline value followed by the dropdown rows when open.
+// inline value followed by the dropdown rows when open. The field always
+// prepends a gutter-width prefix (scroll indicator or blank) so the form
+// does not need to render a separate gutter column (see OwnsGutter).
 func (f *Model[T]) View() tea.View {
+	gutterPrefix := "" //strings.Repeat(" ", f.scrollWidth())
+
 	if !f.pickerOpen {
-		return tea.NewView(f.inlineView())
+		return tea.NewView(gutterPrefix + f.inlineView())
 	}
 
 	// Blank lines around the dropdown replace Menu's removed
@@ -316,35 +307,7 @@ func (f *Model[T]) View() tea.View {
 	top := strings.Repeat("\n", pickerMarginTop)
 	bottom := strings.Repeat("\n", pickerMarginBottom)
 
-	fieldRows, _ := f.pickerRows()
-
-	return tea.NewView(f.inlineView() + "\n" + top + strings.Join(fieldRows, "\n") + bottom)
-}
-
-// LeftGutter returns the picker's scroll-position indicator, one line per
-// line of View() (field.LeftGutterAware); blank while closed or on the
-// inline/margin rows, so only the dropdown's own rows carry an arrow.
-func (f *Model[T]) LeftGutter() string {
-	if !f.pickerOpen {
-		return ""
-	}
-
-	_, gutterRows := f.pickerRows()
-
-	lines := make([]string, 0, 1+pickerMarginTop+len(gutterRows)+pickerMarginBottom)
-	lines = append(lines, "") // inline row: nothing to show here
-
-	for range pickerMarginTop {
-		lines = append(lines, "")
-	}
-
-	lines = append(lines, gutterRows...)
-
-	for range pickerMarginBottom {
-		lines = append(lines, "")
-	}
-
-	return strings.Join(lines, "\n")
+	return tea.NewView(gutterPrefix + f.inlineView() + "\n" + top + f.menu.View().Content + bottom)
 }
 
 // CursorLine returns the 0-indexed line within View() holding the

@@ -2,8 +2,6 @@ package form
 
 import (
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/gzigzigzeo/bubbles/form/field"
 )
 
 // WithEntry appends m as an entry, in call order, classified by whichever
@@ -15,7 +13,7 @@ func WithEntry(m tea.Model) Option {
 }
 
 // WithStyles sets the form's chrome styles.
-func WithStyles(s field.Styles) Option {
+func WithStyles(s Styles) Option {
 	return func(f *Model) {
 		f.SetStyles(s)
 	}
@@ -28,20 +26,14 @@ func WithWidth(w int) Option {
 	}
 }
 
-// hintSetter is implemented by entry wrapper types that carry hint text,
-// letting a single WithHint option configure a FieldEntry.
-type hintSetter interface {
-	setHint(value string)
-}
-
 // FieldOption configures a FieldEntry at construction time.
 type FieldOption[T any] func(*FieldEntry[T])
 
 // WithHint returns an option that sets an entry's hint text, shown while it
-// is focused. Works for NewField entries.
-func WithHint[F hintSetter](hint string) func(F) {
-	return func(f F) {
-		f.setHint(hint)
+// is focused.
+func WithHint[T any](hint string) FieldOption[T] {
+	return func(e *FieldEntry[T]) {
+		e.setHint(hint)
 	}
 }
 
