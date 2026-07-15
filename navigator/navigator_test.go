@@ -1,4 +1,4 @@
-package navigator
+package navigator_test
 
 import (
 	"testing"
@@ -8,7 +8,9 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
+	"github.com/gzigzigzeo/bubbles/navigator/rows/selectfield"
 )
 
 // testLabel is a non-focusable display row.
@@ -47,11 +49,13 @@ func (it *testItem) View() tea.View {
 
 func (it *testItem) Focus() tea.Cmd {
 	it.focused = true
+
 	return nil
 }
 
 func (it *testItem) Blur() tea.Cmd {
 	it.focused = false
+
 	return nil
 }
 
@@ -61,11 +65,13 @@ func (it *testItem) Focused() bool {
 
 func (it *testItem) Enable() tea.Cmd {
 	it.disabled = false
+
 	return nil
 }
 
 func (it *testItem) Disable() tea.Cmd {
 	it.disabled = true
+
 	return nil
 }
 
@@ -73,10 +79,11 @@ func (it *testItem) Disabled() bool {
 	return it.disabled
 }
 
-func sendKey(t *testing.T, n *Model, key string) {
+func sendKey(t *testing.T, nav *navigator.Model, key string) {
 	t.Helper()
 
 	var code rune
+
 	switch key {
 	case "up":
 		code = tea.KeyUp
@@ -88,149 +95,159 @@ func sendKey(t *testing.T, n *Model, key string) {
 		code = rune(key[0])
 	}
 
-	_, _ = n.Update(tea.KeyPressMsg(tea.Key{Code: code}))
+	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{
+		Code:        code,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 }
 
 func TestFocusFirst(t *testing.T) {
-	n := New(
+	nav := navigator.New(
 		testLabel("header"),
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	_ = n.FocusFirst()
+	_ = nav.FocusFirst()
 
-	require.Equal(t, 1, n.ctrl.FocusedIndex())
-	require.Equal(t, 1, n.CursorLine())
+	require.Equal(t, 1, nav.FocusedIndex())
+	require.Equal(t, 1, nav.CursorLine())
 }
 
 func TestFocusLast(t *testing.T) {
-	n := New(
+	nav := navigator.New(
 		testLabel("header"),
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	_ = n.FocusLast()
+	_ = nav.FocusLast()
 
-	require.Equal(t, 2, n.ctrl.FocusedIndex())
-	require.Equal(t, 2, n.CursorLine())
+	require.Equal(t, 2, nav.FocusedIndex())
+	require.Equal(t, 2, nav.CursorLine())
 }
 
 func TestOpenMode_KeepsFocusAtBoundaries(t *testing.T) {
-	n := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+	nav := navigator.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	_ = n.FocusFirst()
+	_ = nav.FocusFirst()
 
 	// Up at first focusable should keep focus on Alpha.
-	sendKey(t, n, "up")
-	require.Equal(t, 0, n.ctrl.FocusedIndex())
-	require.True(t, n.IsAtFirstFocusable())
+	sendKey(t, nav, "up")
+	require.Equal(t, 0, nav.FocusedIndex())
+	require.True(t, nav.IsAtFirstFocusable())
 
 	// Move to Beta and press down; focus should stay on Beta.
-	sendKey(t, n, "down")
-	sendKey(t, n, "down")
-	require.Equal(t, 1, n.ctrl.FocusedIndex())
-	require.True(t, n.IsAtLastFocusable())
+	sendKey(t, nav, "down")
+	sendKey(t, nav, "down")
+	require.Equal(t, 1, nav.FocusedIndex())
+	require.True(t, nav.IsAtLastFocusable())
 }
 
 func TestWrapMode_WrapsAtBoundaries(t *testing.T) {
-	n := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+	nav := navigator.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	n.Wrap()
-	_ = n.FocusFirst()
+	nav.Wrap()
+	_ = nav.FocusFirst()
 
 	// Up at first should wrap to last.
-	sendKey(t, n, "up")
-	require.Equal(t, 1, n.ctrl.FocusedIndex())
+	sendKey(t, nav, "up")
+	require.Equal(t, 1, nav.FocusedIndex())
 
 	// Down at last should wrap to first.
-	sendKey(t, n, "down")
-	require.Equal(t, 0, n.ctrl.FocusedIndex())
+	sendKey(t, nav, "down")
+	require.Equal(t, 0, nav.FocusedIndex())
 }
 
 func TestDisabledRows_AreSkipped(t *testing.T) {
-	n := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta", disabled: true},
-		&testItem{text: "Gamma"},
+	nav := navigator.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: true},
+		&testItem{text: "Gamma", focused: false, disabled: false},
 	)
-	_ = n.FocusFirst()
+	_ = nav.FocusFirst()
 
-	require.Equal(t, 0, n.ctrl.FocusedIndex())
+	require.Equal(t, 0, nav.FocusedIndex())
 
-	sendKey(t, n, "down")
+	sendKey(t, nav, "down")
 
-	require.Equal(t, 2, n.ctrl.FocusedIndex())
+	require.Equal(t, 2, nav.FocusedIndex())
 }
 
 func TestFocusMovement(t *testing.T) {
-	n := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
-		&testItem{text: "Gamma"},
+	nav := navigator.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
+		&testItem{text: "Gamma", focused: false, disabled: false},
 	)
-	_ = n.FocusFirst()
+	_ = nav.FocusFirst()
 
-	sendKey(t, n, "down")
-	require.Equal(t, 1, n.ctrl.FocusedIndex())
+	sendKey(t, nav, "down")
+	require.Equal(t, 1, nav.FocusedIndex())
 
-	sendKey(t, n, "down")
-	require.Equal(t, 2, n.ctrl.FocusedIndex())
+	sendKey(t, nav, "down")
+	require.Equal(t, 2, nav.FocusedIndex())
 
-	sendKey(t, n, "up")
-	require.Equal(t, 1, n.ctrl.FocusedIndex())
+	sendKey(t, nav, "up")
+	require.Equal(t, 1, nav.FocusedIndex())
 }
 
 func TestNestedNavigator_BoundaryAware_LeavesInner(t *testing.T) {
-	inner := New(
-		&testItem{text: "Echo"},
-		&testItem{text: "Foxtrot"},
-		&testItem{text: "Golf"},
+	inner := navigator.New(
+		&testItem{text: "Echo", focused: false, disabled: false},
+		&testItem{text: "Foxtrot", focused: false, disabled: false},
+		&testItem{text: "Golf", focused: false, disabled: false},
 	)
 
-	outer := New(
-		&testItem{text: "Alpha"},
+	outer := navigator.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
 		inner,
-		&testItem{text: "Bravo"},
+		&testItem{text: "Bravo", focused: false, disabled: false},
 	)
 	_ = outer.FocusFirst()
 	sendKey(t, outer, "down") // focus inner -> Echo
 
-	require.Equal(t, 1, outer.ctrl.FocusedIndex())
-	require.Equal(t, 0, inner.ctrl.FocusedIndex())
+	require.Equal(t, 1, outer.FocusedIndex())
+	require.Equal(t, 0, inner.FocusedIndex())
 
 	// Move to Golf (last inner item).
 	sendKey(t, outer, "down")
 	sendKey(t, outer, "down")
-	require.Equal(t, 2, inner.ctrl.FocusedIndex())
+	require.Equal(t, 2, inner.FocusedIndex())
 
 	// Down at inner boundary should move focus to Bravo.
 	sendKey(t, outer, "down")
-	require.Equal(t, 2, outer.ctrl.FocusedIndex())
-	require.True(t, outer.ctrl.Items()[2].(*testItem).focused)
+	require.Equal(t, 2, outer.FocusedIndex())
+
+	bravo, ok := outer.Items()[2].(*testItem)
+	require.True(t, ok)
+	require.True(t, bravo.focused)
 
 	// Up from Bravo moves back into the inner navigator. Navigate to its first
 	// item, then one more up crosses the inner boundary to Alpha.
 	sendKey(t, outer, "up") // Bravo -> Golf
 	sendKey(t, outer, "up") // Golf -> Foxtrot
 	sendKey(t, outer, "up") // Foxtrot -> Echo
-	require.Equal(t, 1, outer.ctrl.FocusedIndex())
-	require.Equal(t, 0, inner.ctrl.FocusedIndex())
+	require.Equal(t, 1, outer.FocusedIndex())
+	require.Equal(t, 0, inner.FocusedIndex())
 
 	sendKey(t, outer, "up") // Echo boundary -> Alpha
-	require.Equal(t, 0, outer.ctrl.FocusedIndex())
+	require.Equal(t, 0, outer.FocusedIndex())
 }
 
 func TestNestedNavigator_BoundaryAware_OuterBoundaryScrolls(t *testing.T) {
-	inner := New(
-		&testItem{text: "Echo"},
-		&testItem{text: "Foxtrot"},
+	inner := navigator.New(
+		&testItem{text: "Echo", focused: false, disabled: false},
+		&testItem{text: "Foxtrot", focused: false, disabled: false},
 	)
 
-	outer := New(
+	outer := navigator.New(
 		testLabel("header"),
 		inner,
 		testLabel("footer"),
@@ -239,17 +256,17 @@ func TestNestedNavigator_BoundaryAware_OuterBoundaryScrolls(t *testing.T) {
 	_ = outer.FocusFirst()
 	sendKey(t, outer, "down") // focus inner -> Echo
 
-	require.Equal(t, 1, outer.ctrl.FocusedIndex())
+	require.Equal(t, 1, outer.FocusedIndex())
 
 	// Move to Foxtrot (last inner item).
 	sendKey(t, outer, "down")
-	require.Equal(t, 1, inner.ctrl.FocusedIndex())
+	require.Equal(t, 1, inner.FocusedIndex())
 
 	// Down at inner boundary. Outer has no focusable below inner, so focus stays
 	// on Foxtrot and the viewport scrolls to reveal the footer.
 	sendKey(t, outer, "down")
-	require.Equal(t, 1, outer.ctrl.FocusedIndex())
-	require.Equal(t, 1, inner.ctrl.FocusedIndex())
+	require.Equal(t, 1, outer.FocusedIndex())
+	require.Equal(t, 1, inner.FocusedIndex())
 	require.Equal(t, 2, outer.ViewportController().YOffset())
 }
 
@@ -257,20 +274,21 @@ func TestNestedNavigator_DelegatesToOuter(t *testing.T) {
 	// Inner navigator that defocuses itself when reaching its last item.
 	inner := &defocusingNavigator{
 		rows: []tea.Model{
-			&testItem{text: "Echo"},
-			&testItem{text: "Foxtrot"},
+			&testItem{text: "Echo", focused: false, disabled: false},
+			&testItem{text: "Foxtrot", focused: false, disabled: false},
 		},
+		focused: -1,
 	}
 
-	outer := New(
-		&testItem{text: "Alpha"},
+	outer := navigator.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
 		inner,
-		&testItem{text: "Bravo"},
+		&testItem{text: "Bravo", focused: false, disabled: false},
 	)
 	_ = outer.FocusFirst()
 	sendKey(t, outer, "down") // focus inner
 
-	require.Equal(t, 1, outer.ctrl.FocusedIndex())
+	require.Equal(t, 1, outer.FocusedIndex())
 
 	// First down inside inner moves to Foxtrot.
 	sendKey(t, outer, "down")
@@ -278,12 +296,8 @@ func TestNestedNavigator_DelegatesToOuter(t *testing.T) {
 
 	// Second down causes inner to defocus; outer moves to Bravo.
 	sendKey(t, outer, "down")
-	require.Equal(t, 2, outer.ctrl.FocusedIndex())
+	require.Equal(t, 2, outer.FocusedIndex())
 }
-
-var defocusKeyDown = key.NewBinding(
-	key.WithKeys("down"),
-)
 
 // defocusingNavigator is a test double that behaves like a FocusReceiver and
 // defocuses when the user presses down at its last item.
@@ -297,24 +311,30 @@ func (d *defocusingNavigator) Init() tea.Cmd {
 }
 
 func (d *defocusingNavigator) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return d, nil
 	}
 
-	if key.Matches(km, defocusKeyDown) && d.focused == len(d.rows)-1 {
+	defocusKeyDown := key.NewBinding(key.WithKeys("down"))
+
+	if key.Matches(keyMsg, defocusKeyDown) && d.focused == len(d.rows)-1 {
 		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Blur()
 		}
+
 		d.focused = -1
+
 		return d, nil
 	}
 
-	if key.Matches(km, defocusKeyDown) && d.focused+1 < len(d.rows) {
+	if key.Matches(keyMsg, defocusKeyDown) && d.focused+1 < len(d.rows) {
 		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Blur()
 		}
+
 		d.focused++
+
 		if f, ok := d.rows[d.focused].(row.Focusable); ok {
 			_ = f.Focus()
 		}
@@ -347,6 +367,7 @@ func (d *defocusingNavigator) Blur() tea.Cmd {
 			_ = f.Blur()
 		}
 	}
+
 	d.focused = -1
 
 	return nil
@@ -389,13 +410,13 @@ func (s *spaceItem) Init() tea.Cmd {
 }
 
 func (s *spaceItem) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok || !s.focused {
 		return s, nil
 	}
 
 	spaceKey := key.NewBinding(key.WithKeys("space"))
-	if key.Matches(km, spaceKey) {
+	if key.Matches(keyMsg, spaceKey) {
 		s.toggled = true
 	}
 
@@ -423,11 +444,46 @@ func (s *spaceItem) Focused() bool {
 }
 
 func TestSpaceForwardsToFocusedRow(t *testing.T) {
-	row := &spaceItem{text: "Alpha"}
-	n := New(testLabel("header"), row)
-	_ = n.FocusFirst()
+	row := &spaceItem{text: "Alpha", focused: false, toggled: false}
+	nav := navigator.New(testLabel("header"), row)
+	_ = nav.FocusFirst()
 
-	sendKey(t, n, "space")
+	sendKey(t, nav, "space")
 
 	require.True(t, row.toggled)
+}
+
+func TestSelectField_OpenPicker_ScrollsSelectedIntoView(t *testing.T) {
+	// Viewport height 3, select field at line 2 with 6 options. The committed
+	// option is far enough down that the picker dropdown would extend below the
+	// viewport; opening it must scroll so the selected option is visible.
+	selectRow := selectfield.NewFromStrings([]string{"a", "b", "c", "d", "e", "f"})
+	selectRow.Set("e")
+
+	nav := navigator.New(
+		testLabel("header"),
+		testLabel("spacer"),
+		selectRow,
+	)
+	nav.ViewportController().SetHeight(3)
+	_ = nav.FocusFirst()
+
+	// Move focus onto the select field (line 2).
+	sendKey(t, nav, "down")
+	sendKey(t, nav, "down")
+
+	require.Equal(t, 2, nav.FocusedIndex())
+
+	// Open the picker. The committed option "e" is at picker index 4, so the
+	// outer cursor line becomes 2 + 1 + 4 = 7. Total content becomes 2 + 1 + 6 = 9.
+	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	require.Greater(t, nav.CursorLine(), 2)
+
+	cursor := nav.CursorLine()
+	offset := nav.ViewportController().YOffset()
+	height := nav.ViewportController().Height()
+
+	require.GreaterOrEqual(t, cursor, offset)
+	require.Less(t, cursor, offset+height)
 }

@@ -8,7 +8,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
 )
 
 // Controller manages an ordered list of items and which one holds focus.
@@ -19,6 +19,8 @@ type Controller struct {
 	nextKey key.Binding
 	prevKey key.Binding
 }
+
+const initialCmdCapacity = 2
 
 // New creates a Controller over items. Focus starts at -1 (nothing focused) and
 // wrap is disabled. Next and previous keys are unbound until configured.
@@ -62,15 +64,15 @@ func (c *Controller) Init() tea.Cmd {
 // Update handles next/previous navigation keys and forwards all other messages
 // to the currently focused item.
 func (c *Controller) Update(msg tea.Msg) tea.Cmd {
-	km, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return c.updateFocused(msg)
 	}
 
 	switch {
-	case key.Matches(km, c.nextKey):
+	case key.Matches(keyMsg, c.nextKey):
 		return c.MoveNext()
-	case key.Matches(km, c.prevKey):
+	case key.Matches(keyMsg, c.prevKey):
 		return c.MovePrev()
 	default:
 		return c.updateFocused(msg)
@@ -113,6 +115,15 @@ func (c *Controller) FocusFirst() tea.Cmd {
 // FocusLast focuses the last non-disabled focusable item.
 func (c *Controller) FocusLast() tea.Cmd {
 	return c.focusIndexDir(c.lastFocusable(), -1)
+}
+
+// FocusIndex focuses the item at idx if it is focusable and non-disabled.
+func (c *Controller) FocusIndex(idx int) tea.Cmd {
+	if !c.isFocusable(idx) {
+		return nil
+	}
+
+	return c.focusIndexDir(idx, 1)
 }
 
 // MoveNext moves focus to the next focusable item, wrapping if enabled.
@@ -204,7 +215,7 @@ func (c *Controller) focusIndexDir(idx int, dir int) tea.Cmd {
 		return nil
 	}
 
-	cmds := make([]tea.Cmd, 0, 2)
+	cmds := make([]tea.Cmd, 0, initialCmdCapacity)
 
 	if blur := c.Blur(); blur != nil {
 		cmds = append(cmds, blur)
@@ -245,13 +256,13 @@ func (c *Controller) isFocusable(idx int) bool {
 		return false
 	}
 
-	it := c.items[idx]
+	item := c.items[idx]
 
-	if _, ok := it.(row.Focusable); !ok {
+	if _, ok := item.(row.Focusable); !ok {
 		return false
 	}
 
-	if d, ok := it.(row.Disableable); ok && d.Disabled() {
+	if d, ok := item.(row.Disableable); ok && d.Disabled() {
 		return false
 	}
 

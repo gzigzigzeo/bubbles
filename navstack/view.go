@@ -22,6 +22,7 @@ type SequenceView struct{}
 // BackgroundColor).
 func (SequenceView) View(stack []tea.Model) tea.View {
 	parts := make([]string, len(stack))
+
 	var top tea.View
 
 	for i, s := range stack {

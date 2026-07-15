@@ -19,10 +19,10 @@
 - When a struct literal has more than one field, put each field on its own line:
   ```go
   // Bad
-  form.Entry{Label: "Port", Hint: "...", Field: port}
+  Entry{Label: "Port", Hint: "...", Field: port}
 
   // Good
-  form.Entry{
+  Entry{
       Label: "Port",
       Hint:  "...",
       Field: port,
@@ -118,6 +118,8 @@ n := i * 2
 
 Use `charm.land/bubbles/v2/key` bindings and `key.Matches` instead of comparing `tea.KeyMsg.String()`.
 
+Declare default key bindings as package-level variables, not functions or methods. Both `key.WithKeys` and `key.WithHelp` are required: `WithHelp` only sets help text and does not define the keys that `key.Matches` checks.
+
 ```go
 // Bad
 switch km.String() {
@@ -125,14 +127,22 @@ case "up", "k":
     // ...
 }
 
+// Bad
+func keyUpBinding() key.Binding {
+    return key.NewBinding(
+        key.WithKeys("up", "k"),
+        key.WithHelp("↑/k", "up"),
+    )
+}
+
 // Good
-var menuKeyUp = key.NewBinding(
+var navKeyUp = key.NewBinding(
     key.WithKeys("up", "k"),
     key.WithHelp("↑/k", "up"),
 )
 
 switch {
-case key.Matches(km, menuKeyUp):
+case key.Matches(km, navKeyUp):
     // ...
 }
 ```
@@ -199,8 +209,8 @@ In navigator-based components, keep rows as data sources and collections as beha
 
 ```go
 // Good: row is data; collection handles Enter/Space.
-row := menurow.New("Alpha", "alpha", "", MySelectMsg{Value: "alpha"})
-collection := menurow.NewCollection(rows, menurow.WithMode[string](menurow.ModeMultiSelect))
+row := menu.New("Alpha", "alpha", "", MySelectMsg{Value: "alpha"})
+collection := menu.NewController(rows, menu.WithMode[string](menu.ModeMultiSelect))
 ```
 
 Active interactive rows such as dropdowns or text inputs may consume their own keys. The navigator itself only moves focus and forwards unhandled keys; it does not know about collections or activation semantics.

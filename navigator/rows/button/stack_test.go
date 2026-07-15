@@ -1,4 +1,4 @@
-package button
+package button_test
 
 import (
 	"testing"
@@ -7,12 +7,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gzigzigzeo/bubbles/navigator"
+	"github.com/gzigzigzeo/bubbles/navigator/rows/button"
 )
 
+func keyPress(code rune) tea.Msg {
+	return tea.KeyPressMsg(tea.Key{
+		Code:        code,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	})
+}
+
 func TestStack_View_rendersButtonsHorizontally(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	view := stack.View().Content
@@ -22,9 +34,9 @@ func TestStack_View_rendersButtonsHorizontally(t *testing.T) {
 }
 
 func TestStack_Focus_firstButton(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	_ = stack.Focus()
@@ -34,46 +46,46 @@ func TestStack_Focus_firstButton(t *testing.T) {
 }
 
 func TestStack_Update_movesFocusRight(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	_ = stack.Focus()
-	_, _ = stack.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
+	_, _ = stack.Update(keyPress(tea.KeyRight))
 
 	require.Equal(t, 1, stack.Controller.FocusedIndex())
 }
 
 func TestStack_Update_movesFocusLeft(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	_ = stack.Focus()
-	_, _ = stack.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
-	_, _ = stack.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyLeft}))
+	_, _ = stack.Update(keyPress(tea.KeyRight))
+	_, _ = stack.Update(keyPress(tea.KeyLeft))
 
 	require.Equal(t, 0, stack.Controller.FocusedIndex())
 }
 
 func TestStack_Update_forwardsPressToFocusedButton(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	_ = stack.Focus()
-	_, cmd := stack.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	_, cmd := stack.Update(keyPress(tea.KeyEnter))
 
 	require.NotNil(t, cmd)
 	require.Equal(t, "msg-a", cmd())
 }
 
 func TestStack_Blur_removesFocus(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
 	)
 
 	_ = stack.Focus()
@@ -84,9 +96,9 @@ func TestStack_Blur_removesFocus(t *testing.T) {
 }
 
 func TestStack_IsAtFirstFocusable(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	_ = stack.Focus()
@@ -96,9 +108,9 @@ func TestStack_IsAtFirstFocusable(t *testing.T) {
 }
 
 func TestStack_IsAtLastFocusable(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	_ = stack.Controller.FocusLast()
@@ -108,28 +120,28 @@ func TestStack_IsAtLastFocusable(t *testing.T) {
 }
 
 func TestStack_CursorLine(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
 	)
 
 	require.Equal(t, 0, stack.CursorLine())
 }
 
 func TestStack_Controller_isPublic(t *testing.T) {
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	stack.Controller.SetPrevKeys("p")
 	stack.Controller.SetNextKeys("n")
 
 	_ = stack.Focus()
-	_, _ = stack.Update(tea.KeyPressMsg(tea.Key{Code: 'n'}))
+	_, _ = stack.Update(keyPress('n'))
 
 	require.Equal(t, 1, stack.Controller.FocusedIndex())
 
-	_, _ = stack.Update(tea.KeyPressMsg(tea.Key{Code: 'p'}))
+	_, _ = stack.Update(keyPress('p'))
 
 	require.Equal(t, 0, stack.Controller.FocusedIndex())
 }
@@ -169,10 +181,10 @@ func (r *testRow) Focused() bool {
 }
 
 func TestStack_Navigator_ExitsAtBoundary(t *testing.T) {
-	row := &testRow{text: "Row"}
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
+	row := &testRow{text: "Row", focused: false}
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
 	)
 
 	nav := navigator.New(row, stack)
@@ -181,36 +193,36 @@ func TestStack_Navigator_ExitsAtBoundary(t *testing.T) {
 	require.True(t, row.Focused())
 
 	// Move down into the stack.
-	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	_, _ = nav.Update(keyPress(tea.KeyDown))
 
 	require.False(t, row.Focused())
 	require.True(t, stack.Focused())
 
 	// Move up out of the stack from the first button.
-	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	_, _ = nav.Update(keyPress(tea.KeyUp))
 
 	require.True(t, row.Focused())
 	require.False(t, stack.Focused())
 }
 
 func TestStack_Navigator_ExitsFromMiddleButton(t *testing.T) {
-	row := &testRow{text: "Row"}
-	stack := NewStack(
-		New("A", "msg-a"),
-		New("B", "msg-b"),
-		New("C", "msg-c"),
+	row := &testRow{text: "Row", focused: false}
+	stack := button.NewStack(
+		button.New("A", "msg-a"),
+		button.New("B", "msg-b"),
+		button.New("C", "msg-c"),
 	)
 
 	nav := navigator.New(row, stack)
 	_ = nav.FocusFirst()
-	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	_, _ = stack.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
+	_, _ = nav.Update(keyPress(tea.KeyDown))
+	_, _ = stack.Update(keyPress(tea.KeyRight))
 
 	require.Equal(t, 1, stack.Controller.FocusedIndex())
 	require.True(t, stack.Focused())
 
 	// Move up out of the stack from the middle button.
-	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	_, _ = nav.Update(keyPress(tea.KeyUp))
 
 	require.True(t, row.Focused())
 	require.False(t, stack.Focused())

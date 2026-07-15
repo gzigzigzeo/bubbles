@@ -45,7 +45,7 @@ var lines = []string{
 }
 
 type model struct {
-	vp scrollview.Model
+	vp *scrollview.Model
 }
 
 // newModel creates the demo model with a fixed initial size.

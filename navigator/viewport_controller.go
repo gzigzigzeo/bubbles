@@ -88,6 +88,13 @@ func (c *ViewportController) View() string {
 		c.viewport.SetContent(c.nav.View().Content)
 	}
 
+	// Re-apply the offset after setting content. syncYOffset runs during Update
+	// while the viewport still holds the previous content, so viewport
+	// implementations that clamp their offset (e.g. bubbletea's viewport) may
+	// have recorded a different value than the one Navigator intended. Updating
+	// the content first makes the offset valid for the new bounds.
+	c.viewport.SetYOffset(c.yOffset)
+
 	return c.viewport.View()
 }
 

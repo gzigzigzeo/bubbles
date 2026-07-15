@@ -3,7 +3,7 @@ package button
 import (
 	"charm.land/lipgloss/v2"
 
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
 )
 
 // Styles is the per-state style set for a button.

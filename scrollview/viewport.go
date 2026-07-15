@@ -20,6 +20,8 @@ const (
 	Right
 )
 
+const reservedEndCells = 2
+
 // Model extends [charm.land/bubbles/v2/viewport.Model] with a 1-column
 // scrollbar alongside the content.
 //
@@ -41,16 +43,18 @@ type Model struct {
 	total int // total number of content lines
 }
 
-// New returns a Model with default styles.
-func New() Model {
-	return Model{
-		Model:  viewport.New(),
-		Styles: DefaultStyles(),
+// New returns a pointer to a Model with default styles.
+func New() *Model {
+	return &Model{
+		Model:    viewport.New(),
+		Position: Left,
+		Styles:   DefaultStyles(),
+		total:    0,
 	}
 }
 
 // Update forwards messages to the embedded viewport and returns an updated copy.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	vp, cmd := m.Model.Update(msg)
 	m.Model = vp
 
@@ -66,7 +70,7 @@ func (m *Model) SetWidth(w int) {
 }
 
 // Width returns the total component width including the scrollbar column.
-func (m Model) Width() int {
+func (m *Model) Width() int {
 	return m.Model.Width() + lipgloss.Width(m.Styles.Track.Render())
 }
 
@@ -93,7 +97,7 @@ func (m *Model) SetContent(s string) {
 // when the target is near the bottom the viewport is positioned so the target
 // sits at the top, revealing any rows below it.
 func (m *Model) ScrollTo(line int) {
-	h := m.Height()
+	height := m.Height()
 	total := m.total
 
 	if line < m.YOffset() {
@@ -102,8 +106,8 @@ func (m *Model) ScrollTo(line int) {
 		// Near the top of the content: maximise visible rows above the target
 		// while keeping it in view (e.g. a heading above the first focusable
 		// control).
-		if line <= h-1 {
-			offset = max(line-(h-1), 0)
+		if line <= height-1 {
+			offset = max(line-(height-1), 0)
 		}
 
 		m.SetYOffset(offset)
@@ -111,14 +115,14 @@ func (m *Model) ScrollTo(line int) {
 		return
 	}
 
-	if line >= m.YOffset()+h {
-		offset := line - h + 1
+	if line >= m.YOffset()+height {
+		offset := line - height + 1
 
 		// Near the bottom of the content: maximise visible rows below the
 		// target while keeping it in view (e.g. trailing non-focusable rows
 		// after the last control).
-		if line >= total-h {
-			offset = min(line, total-h)
+		if line >= total-height {
+			offset = min(line, total-height)
 		}
 
 		m.SetYOffset(offset)
@@ -126,72 +130,87 @@ func (m *Model) ScrollTo(line int) {
 }
 
 // View renders the embedded viewport alongside its scrollbar column.
-func (m Model) View() string {
+func (m *Model) View() string {
 	raw := m.Model.View()
 	if raw == "" {
 		return ""
 	}
 
-	sb := m.scrollbarColumn()
-	if sb == "" {
+	scrollbar := m.scrollbarColumn()
+	if scrollbar == "" {
 		return raw
 	}
 
 	if m.Position == Left {
-		return lipgloss.JoinHorizontal(lipgloss.Top, sb, raw)
+		return lipgloss.JoinHorizontal(lipgloss.Top, scrollbar, raw)
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, raw, sb)
+	return lipgloss.JoinHorizontal(lipgloss.Top, raw, scrollbar)
 }
 
 // scrollbarColumn returns the 1-column scrollbar as a newline-joined string
-// of h styled characters.
-func (m Model) scrollbarColumn() string {
-	h := m.Height()
-	if h == 0 {
+// of height styled characters.
+func (m *Model) scrollbarColumn() string {
+	height := m.Height()
+	if height == 0 {
 		return ""
 	}
 
-	cells := make([]string, h)
+	cells := make([]string, height)
 
-	if m.total <= h {
-		for i := range cells {
-			cells[i] = m.Styles.HiddenBar.Render()
-		}
-
-		return lipgloss.JoinVertical(lipgloss.Top, cells...)
+	if m.total <= height {
+		return renderHiddenScrollbar(cells, m.Styles.HiddenBar)
 	}
 
+	return renderVisibleScrollbar(m, cells, height)
+}
+
+func renderHiddenScrollbar(cells []string, style lipgloss.Style) string {
+	for i := range cells {
+		cells[i] = style.Render()
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Top, cells...)
+}
+
+func renderVisibleScrollbar(model *Model, cells []string, height int) string {
 	// The thumb occupies exactly one cell in the inner range [1, h-2] so
-	// that cells 0 and h-1 are always reserved for the top/bottom indicators.
-	innerCells := h - 2
+	// cells 0 and h-1 are always reserved for the top/bottom indicators.
+	innerCells := height - reservedEndCells
 	thumbPos := 1
 
-	maxOffset := m.total - h
+	maxOffset := model.total - height
 
 	if innerCells > 0 && maxOffset > 0 {
-		thumbPos = 1 + m.YOffset()*(innerCells-1)/maxOffset
+		thumbPos = 1 + model.YOffset()*(innerCells-1)/maxOffset
 	}
 
 	for i := range cells {
 		if i == thumbPos && innerCells > 0 {
-			cells[i] = m.Styles.Thumb.Render()
+			cells[i] = model.Styles.Thumb.Render()
 		} else {
-			cells[i] = m.Styles.Track.Render()
+			cells[i] = model.Styles.Track.Render()
 		}
 	}
 
-	if m.YOffset() > 0 {
-		cells[0] = m.Styles.MoreAbove.Render()
-	} else {
-		cells[0] = m.Styles.NoMoreAbove.Render()
-	}
-
-	if m.YOffset()+h < m.total {
-		cells[h-1] = m.Styles.MoreBelow.Render()
-	} else {
-		cells[h-1] = m.Styles.NoMoreBelow.Render()
-	}
+	cells[0] = topIndicator(model)
+	cells[height-1] = bottomIndicator(model, height)
 
 	return lipgloss.JoinVertical(lipgloss.Top, cells...)
+}
+
+func topIndicator(model *Model) string {
+	if model.YOffset() > 0 {
+		return model.Styles.MoreAbove.Render()
+	}
+
+	return model.Styles.NoMoreAbove.Render()
+}
+
+func bottomIndicator(model *Model, height int) string {
+	if model.YOffset()+height < model.total {
+		return model.Styles.MoreBelow.Render()
+	}
+
+	return model.Styles.NoMoreBelow.Render()
 }

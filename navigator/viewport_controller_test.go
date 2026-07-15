@@ -1,9 +1,14 @@
-package navigator
+package navigator_test
 
 import (
 	"testing"
 
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gzigzigzeo/bubbles/navigator"
+	"github.com/gzigzigzeo/bubbles/navigator/rows/selectfield"
 )
 
 func TestCoordinator_FocusFollowScroll(t *testing.T) {
@@ -14,12 +19,12 @@ func TestCoordinator_FocusFollowScroll(t *testing.T) {
 	//   3: 3
 	//   4: 4
 	// Height 3.
-	nav := New(
-		&testItem{text: "0"},
-		&testItem{text: "1"},
-		&testItem{text: "2"},
-		&testItem{text: "3"},
-		&testItem{text: "4"},
+	nav := navigator.New(
+		&testItem{text: "0", focused: false, disabled: false},
+		&testItem{text: "1", focused: false, disabled: false},
+		&testItem{text: "2", focused: false, disabled: false},
+		&testItem{text: "3", focused: false, disabled: false},
+		&testItem{text: "4", focused: false, disabled: false},
 	)
 	nav.ViewportController().SetHeight(3)
 	_ = nav.FocusFirst()
@@ -32,7 +37,7 @@ func TestCoordinator_FocusFollowScroll(t *testing.T) {
 	sendKey(t, nav, "down")
 	sendKey(t, nav, "down")
 
-	require.Equal(t, 3, nav.ctrl.FocusedIndex())
+	require.Equal(t, 3, nav.FocusedIndex())
 	require.Equal(t, 1, nav.ViewportController().YOffset())
 
 	got := nav.CursorLine()
@@ -46,10 +51,10 @@ func TestCoordinator_BoundaryScrollUp(t *testing.T) {
 	//   1: Alpha
 	//   2: Beta
 	// Height 2.
-	nav := New(
+	nav := navigator.New(
 		testLabel("header"),
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
 	nav.ViewportController().SetHeight(2)
 	_ = nav.FocusFirst()
@@ -79,10 +84,10 @@ func TestCoordinator_BoundaryScrollDown(t *testing.T) {
 	//   4: footer1
 	//   5: footer2
 	// Height 3.
-	nav := New(
+	nav := navigator.New(
 		testLabel("header0"),
 		testLabel("header1"),
-		&testItem{text: "Beta"},
+		&testItem{text: "Beta", focused: false, disabled: false},
 		testLabel("footer0"),
 		testLabel("footer1"),
 		testLabel("footer2"),
@@ -112,11 +117,11 @@ func TestCoordinator_StopsAtScreenEdge(t *testing.T) {
 	//   3: Beta
 	//   4: footer
 	// Height 3.
-	nav := New(
+	nav := navigator.New(
 		testLabel("header1"),
 		testLabel("header2"),
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 		testLabel("footer"),
 	)
 	nav.ViewportController().SetHeight(3)
@@ -138,12 +143,12 @@ func TestCoordinator_StopsAtScreenEdge(t *testing.T) {
 }
 
 func TestCoordinator_NestedNavigatorFollowsViewport(t *testing.T) {
-	inner := New(
-		&testItem{text: "Echo"},
-		&testItem{text: "Foxtrot"},
-		&testItem{text: "Golf"},
-		&testItem{text: "Hotel"},
-		&testItem{text: "India"},
+	inner := navigator.New(
+		&testItem{text: "Echo", focused: false, disabled: false},
+		&testItem{text: "Foxtrot", focused: false, disabled: false},
+		&testItem{text: "Golf", focused: false, disabled: false},
+		&testItem{text: "Hotel", focused: false, disabled: false},
+		&testItem{text: "India", focused: false, disabled: false},
 	)
 
 	// Outer content:
@@ -155,16 +160,16 @@ func TestCoordinator_NestedNavigatorFollowsViewport(t *testing.T) {
 	//   5: Hotel
 	//   6: India
 	// Height 3.
-	nav := New(
+	nav := navigator.New(
 		testLabel("header"),
-		&testItem{text: "Alpha"},
+		&testItem{text: "Alpha", focused: false, disabled: false},
 		inner,
 	)
 	nav.ViewportController().SetHeight(3)
 	_ = nav.FocusFirst()
 	sendKey(t, nav, "down") // move into inner -> Echo
 
-	require.Equal(t, 0, inner.ctrl.FocusedIndex())
+	require.Equal(t, 0, inner.FocusedIndex())
 
 	for _, wantCursor := range []int{3, 4, 5, 6} {
 		sendKey(t, nav, "down")
@@ -183,4 +188,55 @@ func TestCoordinator_NestedNavigatorFollowsViewport(t *testing.T) {
 		require.GreaterOrEqual(t, got, nav.ViewportController().YOffset())
 		require.Less(t, got, nav.ViewportController().YOffset()+nav.ViewportController().Height())
 	}
+}
+
+func TestViewportController_View_ReappliesOffsetAfterContentChange(t *testing.T) {
+	// Regression: viewport implementations that clamp their offset against the
+	// current content (e.g. bubbletea's viewport) could receive syncYOffset
+	// during Update while they still hold the old, smaller content. The clamped
+	// value would then persist into View() even after the content grew. This test
+	// uses a real viewport.Model to verify the selected picker option is visible
+	// after opening the dropdown.
+	selectRow := selectfield.NewFromStrings([]string{"a", "b", "c", "d", "e", "f"})
+	selectRow.Set("e")
+
+	// Content before opening: 0 header, 1 spacer, 2 select inline = 3 lines.
+	// Picker adds 6 lines, total becomes 9. Committed option "e" is at picker
+	// index 4, so the outer cursor line is 2 + 1 + 4 = 7.
+	nav := navigator.New(
+		testLabel("header"),
+		testLabel("spacer"),
+		selectRow,
+	)
+
+	nav.ViewportController().SetHeight(3)
+	vp := viewport.New()
+	nav.ViewportController().SetViewport(&vp)
+	_ = nav.FocusFirst()
+
+	// Move focus onto the select field (line 2).
+	sendKey(t, nav, "down")
+	sendKey(t, nav, "down")
+	require.Equal(t, 2, nav.FocusedIndex())
+
+	// Open the picker.
+	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	require.True(t, selectRow.Focused())
+	require.Greater(t, nav.CursorLine(), 2)
+
+	// Force View() to sync content and re-apply the offset.
+	_ = nav.ViewportController().View()
+
+	cursor := nav.CursorLine()
+	height := nav.ViewportController().Height()
+
+	require.Equal(t, 7, cursor)
+	require.Equal(t, 3, height)
+
+	// The controller's intended offset must match the viewport's actual offset
+	// after View() has synced the new content.
+	require.Equal(t, nav.ViewportController().YOffset(), vp.YOffset())
+	require.GreaterOrEqual(t, cursor, vp.YOffset())
+	require.Less(t, cursor, vp.YOffset()+height)
 }

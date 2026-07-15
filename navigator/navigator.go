@@ -13,24 +13,20 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/gzigzigzeo/bubbles/navigator/focus"
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
 )
 
-// keyUpBinding returns the key binding for moving focus up.
-func keyUpBinding() key.Binding {
-	return key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "up"),
-	)
-}
+// keyUpBinding is the default key binding for moving focus up.
+var keyUpBinding = key.NewBinding(
+	key.WithKeys("up", "k"),
+	key.WithHelp("↑/k", "up"),
+)
 
-// keyDownBinding returns the key binding for moving focus down.
-func keyDownBinding() key.Binding {
-	return key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "down"),
-	)
-}
+// keyDownBinding is the default key binding for moving focus down.
+var keyDownBinding = key.NewBinding(
+	key.WithKeys("down", "j"),
+	key.WithHelp("↓/j", "down"),
+)
 
 // Model manages an ordered list of rows with keyboard navigation.
 // It renders rows as a flat joined string and uses an internal
@@ -87,6 +83,15 @@ func (n *Model) FocusLast() tea.Cmd {
 	return cmd
 }
 
+// FocusIndex focuses the row at idx if it is focusable and scrolls it into
+// view.
+func (n *Model) FocusIndex(idx int) tea.Cmd {
+	cmd := n.ctrl.FocusIndex(idx)
+	n.scrollToFocus()
+
+	return cmd
+}
+
 // Focus focuses the first non-disabled row. Implements [row.Focusable].
 func (n *Model) Focus() tea.Cmd {
 	return n.FocusFirst()
@@ -135,6 +140,17 @@ func (n *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	n.scrollAfterMove(oldCursor, dir)
 
 	return n, cmd
+}
+
+// FocusedIndex returns the index of the currently focused row, or -1 if none
+// is focused.
+func (n *Model) FocusedIndex() int {
+	return n.ctrl.FocusedIndex()
+}
+
+// Items returns the navigator's rows.
+func (n *Model) Items() []tea.Model {
+	return n.ctrl.Items()
 }
 
 // View renders all rows as a flat joined string. Pair with a viewport (via the
@@ -193,9 +209,9 @@ func (n *Model) CursorLine() int {
 // navigationDir returns -1 for up keys, 1 for down keys, and 0 otherwise.
 func (n *Model) navigationDir(keyMsg tea.KeyMsg) int {
 	switch {
-	case key.Matches(keyMsg, keyUpBinding()):
+	case key.Matches(keyMsg, keyUpBinding):
 		return -1
-	case key.Matches(keyMsg, keyDownBinding()):
+	case key.Matches(keyMsg, keyDownBinding):
 		return 1
 	}
 
@@ -256,11 +272,11 @@ func (n *Model) exitAtBoundary(keyMsg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 
 	switch {
-	case key.Matches(keyMsg, keyUpBinding()):
+	case key.Matches(keyMsg, keyUpBinding):
 		if boundary.IsAtFirstFocusable() {
 			return n.move(-1), true
 		}
-	case key.Matches(keyMsg, keyDownBinding()):
+	case key.Matches(keyMsg, keyDownBinding):
 		if boundary.IsAtLastFocusable() {
 			return n.move(1), true
 		}
@@ -281,7 +297,7 @@ func (n *Model) recoverFocusIfDefocused(keyMsg tea.KeyMsg, updated tea.Model, wa
 	}
 
 	dir := 1
-	if key.Matches(keyMsg, keyUpBinding()) {
+	if key.Matches(keyMsg, keyUpBinding) {
 		dir = -1
 	}
 

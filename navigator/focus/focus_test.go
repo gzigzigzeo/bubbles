@@ -1,4 +1,4 @@
-package focus
+package focus_test
 
 import (
 	"testing"
@@ -7,7 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator/focus"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
 )
 
 // testItem is a focusable, optionally disabled item.
@@ -62,131 +63,158 @@ func (it *testItem) Disabled() bool {
 }
 
 func TestController_FocusFirst(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta", disabled: true},
-		&testItem{text: "Gamma"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: true},
+		&testItem{text: "Gamma", focused: false, disabled: false},
 	)
 
-	_ = c.FocusFirst()
+	_ = ctrl.FocusFirst()
 
-	require.Equal(t, 0, c.FocusedIndex())
-	require.True(t, c.Items()[0].(*testItem).focused)
+	require.Equal(t, 0, ctrl.FocusedIndex())
+
+	first, ok := ctrl.Items()[0].(*testItem)
+	require.True(t, ok)
+	require.True(t, first.focused)
 }
 
 func TestController_FocusLast(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta", disabled: true},
-		&testItem{text: "Gamma"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: true},
+		&testItem{text: "Gamma", focused: false, disabled: false},
 	)
 
-	_ = c.FocusLast()
+	_ = ctrl.FocusLast()
 
-	require.Equal(t, 2, c.FocusedIndex())
-	require.True(t, c.Items()[2].(*testItem).focused)
+	require.Equal(t, 2, ctrl.FocusedIndex())
+
+	last, ok := ctrl.Items()[2].(*testItem)
+	require.True(t, ok)
+	require.True(t, last.focused)
 }
 
 func TestController_MoveNext_skipsDisabled(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta", disabled: true},
-		&testItem{text: "Gamma"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: true},
+		&testItem{text: "Gamma", focused: false, disabled: false},
 	)
 
-	_ = c.FocusFirst()
-	_ = c.MoveNext()
+	_ = ctrl.FocusFirst()
+	_ = ctrl.MoveNext()
 
-	require.Equal(t, 2, c.FocusedIndex())
+	require.Equal(t, 2, ctrl.FocusedIndex())
 }
 
 func TestController_MovePrev_skipsDisabled(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta", disabled: true},
-		&testItem{text: "Gamma"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: true},
+		&testItem{text: "Gamma", focused: false, disabled: false},
 	)
 
-	_ = c.FocusLast()
-	_ = c.MovePrev()
+	_ = ctrl.FocusLast()
+	_ = ctrl.MovePrev()
 
-	require.Equal(t, 0, c.FocusedIndex())
+	require.Equal(t, 0, ctrl.FocusedIndex())
 }
 
 func TestController_MoveNext_stopsAtBoundaryWithoutWrap(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
 
-	_ = c.FocusLast()
-	_ = c.MoveNext()
+	_ = ctrl.FocusLast()
+	_ = ctrl.MoveNext()
 
-	require.Equal(t, 1, c.FocusedIndex())
-	require.True(t, c.IsAtLastFocusable())
+	require.Equal(t, 1, ctrl.FocusedIndex())
+	require.True(t, ctrl.IsAtLastFocusable())
 }
 
 func TestController_MoveNext_wrapsAtBoundary(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	c.SetWrap(true)
+	ctrl.SetWrap(true)
 
-	_ = c.FocusLast()
-	_ = c.MoveNext()
+	_ = ctrl.FocusLast()
+	_ = ctrl.MoveNext()
 
-	require.Equal(t, 0, c.FocusedIndex())
+	require.Equal(t, 0, ctrl.FocusedIndex())
 }
 
 func TestController_Update_handlesNextKey(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	c.SetNextKeys("down", "j")
-	c.SetPrevKeys("up", "k")
+	ctrl.SetNextKeys("down", "j")
+	ctrl.SetPrevKeys("up", "k")
 
-	_ = c.FocusFirst()
-	_ = c.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	_ = ctrl.FocusFirst()
+	_ = ctrl.Update(tea.KeyPressMsg(tea.Key{
+		Code:        tea.KeyDown,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
-	require.Equal(t, 1, c.FocusedIndex())
+	require.Equal(t, 1, ctrl.FocusedIndex())
 }
 
 func TestController_Update_handlesPrevKey(t *testing.T) {
-	c := New(
-		&testItem{text: "Alpha"},
-		&testItem{text: "Beta"},
+	ctrl := focus.New(
+		&testItem{text: "Alpha", focused: false, disabled: false},
+		&testItem{text: "Beta", focused: false, disabled: false},
 	)
-	c.SetNextKeys("down", "j")
-	c.SetPrevKeys("up", "k")
+	ctrl.SetNextKeys("down", "j")
+	ctrl.SetPrevKeys("up", "k")
 
-	_ = c.FocusLast()
-	_ = c.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	_ = ctrl.FocusLast()
+	_ = ctrl.Update(tea.KeyPressMsg(tea.Key{
+		Code:        tea.KeyUp,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
-	require.Equal(t, 0, c.FocusedIndex())
+	require.Equal(t, 0, ctrl.FocusedIndex())
 }
 
 func TestController_Update_forwardsOtherKeysToFocusedItem(t *testing.T) {
-	space := &spaceItem{text: "Alpha"}
-	c := New(space)
-	c.SetNextKeys("down")
-	c.SetPrevKeys("up")
+	space := &spaceItem{text: "Alpha", focused: false, toggled: false}
+	ctrl := focus.New(space)
+	ctrl.SetNextKeys("down")
+	ctrl.SetPrevKeys("up")
 
-	_ = c.FocusFirst()
-	_ = c.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}))
+	_ = ctrl.FocusFirst()
+	_ = ctrl.Update(tea.KeyPressMsg(tea.Key{
+		Code:        tea.KeySpace,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
 	require.True(t, space.toggled)
 }
 
 func TestController_Blur_removesFocus(t *testing.T) {
-	c := New(&testItem{text: "Alpha"})
+	ctrl := focus.New(&testItem{text: "Alpha", focused: false, disabled: false})
 
-	_ = c.FocusFirst()
-	_ = c.Blur()
+	_ = ctrl.FocusFirst()
+	_ = ctrl.Blur()
 
-	require.False(t, c.Focused())
-	require.Equal(t, -1, c.FocusedIndex())
+	require.False(t, ctrl.Focused())
+	require.Equal(t, -1, ctrl.FocusedIndex())
 }
 
 // spaceItem records whether it received a space key.
@@ -201,13 +229,13 @@ func (s *spaceItem) Init() tea.Cmd {
 }
 
 func (s *spaceItem) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok || !s.focused {
 		return s, nil
 	}
 
 	spaceKey := key.NewBinding(key.WithKeys("space"))
-	if key.Matches(km, spaceKey) {
+	if key.Matches(keyMsg, spaceKey) {
 		s.toggled = true
 	}
 

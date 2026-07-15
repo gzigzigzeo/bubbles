@@ -31,24 +31,33 @@ type Model[V StackView] struct {
 // V's zero value — both TailView and SequenceView are stateless, so this needs no
 // explicit initialization.
 func New[V StackView](initial tea.Model) *Model[V] {
-	return &Model[V]{stack: []tea.Model{initial}}
+	var view V
+
+	return &Model[V]{
+		stack: []tea.Model{initial},
+		view:  view,
+	}
 }
 
 // Push adds a new screen to the top of the stack and returns its Init() command.
 func (b *Model[V]) Push(screen tea.Model) tea.Cmd {
 	b.stack = append(b.stack, screen)
+
 	return screen.Init()
 }
 
 // Replace replaces the top screen with a new one and returns its Init() command.
 func (b *Model[V]) Replace(screen tea.Model) tea.Cmd {
 	b.stack[len(b.stack)-1] = screen
+
 	return screen.Init()
 }
 
+const minStackSizeForPop = 2
+
 // Pop removes the top screen. Does nothing when only one screen remains.
 func (b *Model[V]) Pop() {
-	if len(b.stack) < 2 {
+	if len(b.stack) < minStackSizeForPop {
 		return
 	}
 
@@ -90,35 +99,28 @@ func (b *Model[V]) Strategy() V {
 // SequenceView are stateless and don't need this.
 func (b *Model[V]) WithStrategy(view V) *Model[V] {
 	b.view = view
+
 	return b
 }
-
-// noop is batched alongside a revealed screen's Init() cmd after a BackMsg
-// pop so the result is always a non-nil tea.Cmd, even when that Init()
-// itself returns nil. Update's own cmd == nil check is how a NavStack
-// embedded as a screen inside another NavStack tells its parent "I already
-// handled this BackMsg" — tea.Batch propagates non-nil-ness based on the cmd
-// function values it's given, not on the messages they produce when called,
-// so it stays non-nil regardless of what noop or Init() yield when invoked.
-// Do not replace this with a literal nil: that would make cmd == nil true
-// again after a pop, and a parent NavStack would double-pop in response.
-var noop tea.Cmd = func() tea.Msg { return nil }
 
 // Update delegates BackMsg to the top screen first. If the top screen
 // returns a non-nil command, Update forwards it unchanged — BackMsg is
 // considered handled, but any real work the screen requested still runs. If
 // it returns nil and this stack has more than one screen, this stack pops
 // itself, calls Init() on the screen it reveals (so it can reclaim focus,
-// e.g. a text field), and returns noop batched with that Init() cmd so its
-// parent knows not to pop again even if the revealed screen's own Init()
-// returns nil. All other messages are delegated to the top screen and their
-// command is returned as-is.
+// e.g. a text field), and returns a non-nil command batched with that Init()
+// cmd so its parent knows not to pop again even if the revealed screen's own
+// Init() returns nil. All other messages are delegated to the top screen and
+// their command is returned as-is.
 func (b *Model[V]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	updated, cmd := b.Top().Update(msg)
 	b.stack[len(b.stack)-1] = updated
 
 	if _, ok := msg.(BackMsg); ok && cmd == nil && len(b.stack) > 1 {
 		b.Pop()
+
+		noop := func() tea.Msg { return nil }
+
 		return b, tea.Batch(noop, b.Top().Init())
 	}
 

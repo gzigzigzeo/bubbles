@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,7 +12,17 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-var enterKey = key.NewBinding(key.WithKeys("enter"))
+var (
+	// ErrDuplicateKey is returned by New when two options register the same key.
+	ErrDuplicateKey = errors.New("prompt: duplicate key")
+
+	// ErrNilMsg is returned by New when an option's Msg is nil.
+	ErrNilMsg = errors.New("prompt: option has a nil Msg")
+
+	// ErrDefaultKeyNotRegistered is returned by New when WithDefault names a key
+	// that was never registered via WithOption.
+	ErrDefaultKeyNotRegistered = errors.New("prompt: default key is not among the registered options")
+)
 
 // defaultInvalidKeyFlash is how long the invalid-key hint stays visible
 // before automatically clearing, unless overridden with
@@ -150,34 +161,53 @@ type Model struct {
 // any option's Msg is nil, or if WithDefault names a key that wasn't
 // registered via WithOption.
 func New(question string, opts ...Option) (*Model, error) {
-	p := &Model{
-		question:         question,
+	promptModel := &Model{
+		question:    question,
+		options:     nil,
+		defaultKey:  0,
+		rejectEnter: false,
+		answer:      nil,
+		focused:     false,
+		styles: Styles{
+			Container:       lipgloss.NewStyle(),
+			Icon:            lipgloss.NewStyle(),
+			Label:           lipgloss.NewStyle(),
+			CursorStyle:     lipgloss.NewStyle(),
+			CursorTextStyle: lipgloss.NewStyle(),
+			Echo:            lipgloss.NewStyle(),
+			Invalid:         lipgloss.NewStyle(),
+		},
+		invalidKey:       "",
+		invalidGen:       0,
 		invalidFlashTime: defaultInvalidKeyFlash,
 		Cursor:           cursor.New(),
 	}
 
 	for _, opt := range opts {
-		opt(p)
+		opt(promptModel)
 	}
 
-	seen := make(map[rune]bool, len(p.options))
-	for _, o := range p.options {
-		if seen[o.key] {
-			return nil, fmt.Errorf("prompt: duplicate key %q", o.key)
+	seen := make(map[rune]bool, len(promptModel.options))
+
+	for _, opt := range promptModel.options {
+		if seen[opt.key] {
+			return nil, fmt.Errorf("%w %q", ErrDuplicateKey, opt.key)
 		}
-		seen[o.key] = true
-		if o.msg == nil {
-			return nil, fmt.Errorf("prompt: option for key %q has a nil Msg", o.key)
+
+		seen[opt.key] = true
+
+		if opt.msg == nil {
+			return nil, fmt.Errorf("%w for key %q", ErrNilMsg, opt.key)
 		}
 	}
 
-	if p.defaultKey != 0 && !seen[p.defaultKey] {
-		return nil, fmt.Errorf("prompt: default key %q is not among the registered options", p.defaultKey)
+	if promptModel.defaultKey != 0 && !seen[promptModel.defaultKey] {
+		return nil, fmt.Errorf("%w %q", ErrDefaultKeyNotRegistered, promptModel.defaultKey)
 	}
 
-	p.SetStyles(p.styles)
+	promptModel.SetStyles(promptModel.styles)
 
-	return p, nil
+	return promptModel, nil
 }
 
 // SetStyles injects styles and applies the cursor appearance.
@@ -200,6 +230,7 @@ func (p *Model) Focus() tea.Cmd {
 	p.invalidKey = ""
 	p.invalidGen++
 	p.Cursor.SetChar(" ")
+
 	return p.Cursor.Focus()
 }
 
@@ -229,6 +260,7 @@ func (p *Model) Value() *rune {
 func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cm, ok := msg.(invalidKeyClearedMsg); ok {
 		p.handleInvalidKeyCleared(cm)
+
 		return p, nil
 	}
 
@@ -239,77 +271,12 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newCur, curCmd := p.Cursor.Update(msg)
 	p.Cursor = newCur
 
-	km, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return p, curCmd
 	}
 
-	return p, p.handleKeyPress(km, curCmd)
-}
-
-// handleInvalidKeyCleared clears the invalid-key flash if cm still matches
-// the current generation, i.e. no newer invalid key has been pressed since
-// this clear timer was started.
-func (p *Model) handleInvalidKeyCleared(cm invalidKeyClearedMsg) {
-	if cm.source == p && cm.gen == p.invalidGen {
-		p.invalidKey = ""
-	}
-}
-
-// handleKeyPress answers the prompt if km matches an accepted key or the
-// default-Enter binding, otherwise flags km as an invalid key. curCmd is the
-// cursor's own command for this message, preserved in either outcome.
-func (p *Model) handleKeyPress(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
-	if i, ok := p.matchedKeyIndex(km); ok {
-		return p.accept(p.options[i].key, p.options[i].msg)
-	}
-
-	if !p.rejectEnter && p.defaultKey != 0 && key.Matches(km, enterKey) {
-		for _, o := range p.options {
-			if o.key == p.defaultKey {
-				return p.accept(o.key, o.msg)
-			}
-		}
-	}
-
-	return p.flagInvalid(km, curCmd)
-}
-
-// matchedKeyIndex reports the index of the accepted key bound to km, if any.
-func (p *Model) matchedKeyIndex(km tea.KeyMsg) (int, bool) {
-	s := km.String()
-	for i, o := range p.options {
-		if string(o.key) == s {
-			return i, true
-		}
-	}
-
-	return 0, false
-}
-
-// accept records r as the answer, clears any invalid-key flash, and emits msg.
-func (p *Model) accept(r rune, msg tea.Msg) tea.Cmd {
-	p.answer = &r
-	p.invalidKey = ""
-
-	return func() tea.Msg { return msg }
-}
-
-// flagInvalid shows km as a brief invalid-key flash in place of the cursor,
-// schedules it to clear itself after invalidFlashTime, and emits
-// invalidKeyMsg.
-func (p *Model) flagInvalid(km tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
-	p.invalidGen++
-	gen := p.invalidGen
-	p.invalidKey = km.String()
-
-	return tea.Batch(
-		curCmd,
-		func() tea.Msg { return invalidKeyMsg{Source: p, Key: km.String()} },
-		tea.Tick(p.invalidFlashTime, func(time.Time) tea.Msg {
-			return invalidKeyClearedMsg{source: p, gen: gen}
-		}),
-	)
+	return p, p.handleKeyPress(keyMsg, curCmd)
 }
 
 // View renders the prompt: icon, question text with auto-generated choice hint,
@@ -325,6 +292,7 @@ func (p *Model) View() tea.View {
 		if p.invalidKey != "" {
 			marker = p.styles.Invalid.Render(p.invalidKey)
 		}
+
 		rawQuestion = rawQuestion + " " + marker
 	}
 
@@ -345,13 +313,81 @@ func (p *Model) View() tea.View {
 func (p *Model) choiceHint() string {
 	parts := make([]string, len(p.options))
 
-	for i, o := range p.options {
-		if p.defaultKey != 0 && o.key == p.defaultKey {
-			parts[i] = strings.ToUpper(string(o.key))
+	for i, opt := range p.options {
+		if p.defaultKey != 0 && opt.key == p.defaultKey {
+			parts[i] = strings.ToUpper(string(opt.key))
 		} else {
-			parts[i] = string(o.key)
+			parts[i] = string(opt.key)
 		}
 	}
 
 	return "[" + strings.Join(parts, "/") + "]:"
+}
+
+// handleInvalidKeyCleared clears the invalid-key flash if cm still matches
+// the current generation, i.e. no newer invalid key has been pressed since
+// this clear timer was started.
+func (p *Model) handleInvalidKeyCleared(cm invalidKeyClearedMsg) {
+	if cm.source == p && cm.gen == p.invalidGen {
+		p.invalidKey = ""
+	}
+}
+
+// handleKeyPress answers the prompt if km matches an accepted key or the
+// default-Enter binding, otherwise flags km as an invalid key. curCmd is the
+// cursor's own command for this message, preserved in either outcome.
+func (p *Model) handleKeyPress(keyMsg tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
+	if i, ok := p.matchedKeyIndex(keyMsg); ok {
+		return p.accept(p.options[i].key, p.options[i].msg)
+	}
+
+	enterBinding := key.NewBinding(key.WithKeys("enter"))
+
+	if !p.rejectEnter && p.defaultKey != 0 && key.Matches(keyMsg, enterBinding) {
+		for _, opt := range p.options {
+			if opt.key == p.defaultKey {
+				return p.accept(opt.key, opt.msg)
+			}
+		}
+	}
+
+	return p.flagInvalid(keyMsg, curCmd)
+}
+
+// matchedKeyIndex reports the index of the accepted key bound to km, if any.
+func (p *Model) matchedKeyIndex(keyMsg tea.KeyMsg) (int, bool) {
+	keyStr := keyMsg.String()
+
+	for i, opt := range p.options {
+		if string(opt.key) == keyStr {
+			return i, true
+		}
+	}
+
+	return 0, false
+}
+
+// accept records r as the answer, clears any invalid-key flash, and emits msg.
+func (p *Model) accept(r rune, msg tea.Msg) tea.Cmd {
+	p.answer = &r
+	p.invalidKey = ""
+
+	return func() tea.Msg { return msg }
+}
+
+// flagInvalid shows km as a brief invalid-key flash in place of the cursor,
+// schedules it to clear itself after invalidFlashTime, and emits
+// invalidKeyMsg.
+func (p *Model) flagInvalid(keyMsg tea.KeyMsg, curCmd tea.Cmd) tea.Cmd {
+	p.invalidGen++
+	gen := p.invalidGen
+	p.invalidKey = keyMsg.String()
+
+	return tea.Batch(
+		curCmd,
+		func() tea.Msg { return invalidKeyMsg{Source: p, Key: keyMsg.String()} },
+		tea.Tick(p.invalidFlashTime, func(time.Time) tea.Msg {
+			return invalidKeyClearedMsg{source: p, gen: gen}
+		}),
+	)
 }

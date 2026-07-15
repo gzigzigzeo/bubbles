@@ -1,79 +1,108 @@
-package button
+package button_test
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gzigzigzeo/bubbles/navigator/rows/button"
 )
 
 func TestModel_View_rendersLabelWhenFocused(t *testing.T) {
-	m := New("OK", "msg")
+	m := button.New("OK", "msg")
 	_ = m.Focus()
 
 	require.Contains(t, m.View().Content, "OK")
 }
 
 func TestModel_View_rendersLabelWhenBlurred(t *testing.T) {
-	m := New("OK", "msg")
+	m := button.New("OK", "msg")
 
 	require.Contains(t, m.View().Content, "OK")
 }
 
 func TestModel_View_faintWhenDisabled(t *testing.T) {
-	m := New("OK", "msg")
+	m := button.New("OK", "msg")
 	_ = m.Disable()
 
-	require.True(t, strings.Contains(m.View().Content, "\u001b[2m"), "disabled button should render faint")
+	require.Contains(t, m.View().Content, "\u001b[2m")
 }
 
 func TestModel_New_panicsWhenMsgIsNil(t *testing.T) {
 	require.Panics(t, func() {
-		_ = New("OK", nil)
+		_ = button.New("OK", nil)
 	})
 }
 
 func TestModel_Update_emitsMsgOnPress(t *testing.T) {
-	m := New("OK", "pressed")
+	m := button.New("OK", "pressed")
 	_ = m.Focus()
 
-	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{
+		Code:        tea.KeyEnter,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
 	require.NotNil(t, cmd)
 	require.Equal(t, "pressed", cmd())
 }
 
 func TestModel_Update_ignoresPressWhenBlurred(t *testing.T) {
-	m := New("OK", "pressed")
+	m := button.New("OK", "pressed")
 
-	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{
+		Code:        tea.KeyEnter,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
 	require.Nil(t, cmd)
 }
 
 func TestModel_Update_ignoresPressWhenDisabled(t *testing.T) {
-	m := New("OK", "pressed")
+	m := button.New("OK", "pressed")
 	_ = m.Focus()
 	_ = m.Disable()
 
-	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{
+		Code:        tea.KeyEnter,
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
 	require.Nil(t, cmd)
 }
 
 func TestModel_Update_usesCustomPressKey(t *testing.T) {
-	m := New("OK", "pressed", WithPressKeys("x"))
+	m := button.New("OK", "pressed", button.WithPressKeys("x"))
 	_ = m.Focus()
 
-	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'x'}))
+	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{
+		Code:        'x',
+		Text:        "",
+		Mod:         0,
+		ShiftedCode: 0,
+		BaseCode:    0,
+		IsRepeat:    false,
+	}))
 
 	require.NotNil(t, cmd)
 	require.Equal(t, "pressed", cmd())
 }
 
 func TestModel_SetMsg_panicsWhenNil(t *testing.T) {
-	m := New("OK", "msg")
+	m := button.New("OK", "msg")
 
 	require.Panics(t, func() {
 		m.SetMsg(nil)

@@ -5,7 +5,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/gzigzigzeo/bubbles/navigator/focus"
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
 )
 
 // StackStyles holds the visual pieces of a button stack.
@@ -18,8 +18,9 @@ type StackStyles struct {
 // navigator handles up/down keys directly, so the stack is a plain
 // [row.Focusable] and does not implement [row.FocusReceiver].
 type Stack struct {
+	row.FocusedState
+
 	styles     StackStyles
-	state      row.FocusedState
 	Controller *focus.Controller
 }
 
@@ -30,7 +31,9 @@ func NewStack(buttons ...tea.Model) *Stack {
 	ctrl.SetNextKeys("right", "l")
 
 	return &Stack{
-		Controller: ctrl,
+		FocusedState: row.FocusedState{},
+		styles:       StackStyles{Wrapper: lipgloss.NewStyle()},
+		Controller:   ctrl,
 	}
 }
 
@@ -70,7 +73,7 @@ func (s *Stack) View() tea.View {
 
 // Focus focuses the first button in the stack. Implements [row.Focusable].
 func (s *Stack) Focus() tea.Cmd {
-	s.state.Focus()
+	s.FocusedState.Focus()
 
 	return s.Controller.Focus()
 }
@@ -78,14 +81,9 @@ func (s *Stack) Focus() tea.Cmd {
 // Blur removes focus from the stack and its current button. Implements
 // [row.Focusable].
 func (s *Stack) Blur() tea.Cmd {
-	s.state.Blur()
+	s.FocusedState.Blur()
 
 	return s.Controller.Blur()
-}
-
-// Focused reports whether the stack holds focus. Implements [row.Focusable].
-func (s *Stack) Focused() bool {
-	return s.state.Focused()
 }
 
 // IsAtFirstFocusable reports whether the currently focused button is the first

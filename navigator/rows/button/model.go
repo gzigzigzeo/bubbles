@@ -7,7 +7,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/gzigzigzeo/bubbles/navigator/rows/row"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
+)
+
+// defaultPressKey is the default key binding that presses a button.
+var defaultPressKey = key.NewBinding(
+	key.WithKeys("enter"),
+	key.WithHelp("enter", "press"),
 )
 
 // Option configures a [Model].
@@ -27,8 +33,8 @@ type Model struct {
 	row.StatefulStyles[lipgloss.Style]
 	row.FocusedState
 	row.DisabledState
+	row.LabelState
 
-	label    string
 	msg      tea.Msg
 	pressKey key.Binding
 }
@@ -36,18 +42,26 @@ type Model struct {
 // New creates a button with the given label and message. The default press key
 // is enter. msg must not be nil.
 func New(label string, msg tea.Msg, opts ...Option) *Model {
-	m := &Model{
-		label:    label,
-		msg:      msg,
-		pressKey: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "press")),
+	if msg == nil {
+		panic("button.New: msg must not be nil")
 	}
-	m.SetStyles(DefaultStyles())
+
+	buttonModel := &Model{
+		StatefulStyles: row.StatefulStyles[lipgloss.Style]{},
+		FocusedState:   row.FocusedState{},
+		DisabledState:  row.DisabledState{},
+		LabelState:     row.LabelState{},
+		msg:            msg,
+		pressKey:       defaultPressKey,
+	}
+	buttonModel.SetLabel(label)
+	buttonModel.SetStyles(DefaultStyles())
 
 	for _, opt := range opts {
-		opt(m)
+		opt(buttonModel)
 	}
 
-	return m
+	return buttonModel
 }
 
 // Init satisfies [tea.Model].
@@ -80,17 +94,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() tea.View {
 	style := m.StateStyles(m.Disabled(), m.Focused())
 
-	return tea.NewView(style.Render(m.label))
-}
-
-// Label returns the button label.
-func (m *Model) Label() string {
-	return m.label
-}
-
-// SetLabel sets the button label.
-func (m *Model) SetLabel(label string) {
-	m.label = label
+	return tea.NewView(style.Render(m.Label()))
 }
 
 // Msg returns the message emitted when the button is pressed.
