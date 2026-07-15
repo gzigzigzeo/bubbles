@@ -124,7 +124,7 @@ func TestModel_Blur_notifiesController(t *testing.T) {
 	require.Equal(t, -1, ctrl.FocusedIndex())
 }
 
-func TestModel_Update_forwardsKeysToController(t *testing.T) {
+func TestModel_Update_ignoresKeys(t *testing.T) {
 	rows := []*menu.Model[string]{
 		menu.New("Alpha", "alpha", "", "msg-a"),
 		menu.New("Beta", "beta", "", "msg-b"),
@@ -133,30 +133,6 @@ func TestModel_Update_forwardsKeysToController(t *testing.T) {
 
 	_ = rows[0].Focus()
 	_, cmd := rows[0].Update(keyPress(tea.KeyEnter))
-
-	require.NotNil(t, cmd)
-	require.Equal(t, "msg-a", cmd())
-}
-
-func TestModel_Update_ignoresKeysWhenDisabled(t *testing.T) {
-	rows := []*menu.Model[string]{
-		menu.New("Alpha", "alpha", "", "msg-a"),
-	}
-	_ = menu.NewController(rows)
-
-	_ = rows[0].Focus()
-	_ = rows[0].Disable()
-
-	_, cmd := rows[0].Update(keyPress(tea.KeyEnter))
-
-	require.Nil(t, cmd)
-}
-
-func TestModel_Update_ignoresKeysWhenNotInController(t *testing.T) {
-	m := menu.New("Alpha", "alpha", "", "msg")
-	_ = m.Focus()
-
-	_, cmd := m.Update(keyPress(tea.KeyEnter))
 
 	require.Nil(t, cmd)
 }

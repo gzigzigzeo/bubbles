@@ -9,10 +9,14 @@ import (
 )
 
 // OnMsg is emitted when the toggle becomes true.
-type OnMsg struct{}
+type OnMsg struct {
+	Source *Model
+}
 
 // OffMsg is emitted when the toggle becomes false.
-type OffMsg struct{}
+type OffMsg struct {
+	Source *Model
+}
 
 // defaultToggleKey is the default key binding that toggles the row.
 var defaultToggleKey = key.NewBinding(
@@ -57,21 +61,13 @@ type Model struct {
 
 // New creates a toggle row with the given label.
 func New(label string, opts ...Option) *Model {
-	m := &Model{
-		StatefulStyles: row.StatefulStyles[ToggleStyles]{},
-		FocusedState:   row.FocusedState{},
-		DisabledState:  row.DisabledState{},
-		LabelState:     row.LabelState{},
-		toggleKey:      defaultToggleKey,
-	}
-	m.SetLabel(label)
-	m.SetStyles(DefaultStyles("On", "Off"))
+	b := NewBuilder().Label(label)
 
 	for _, opt := range opts {
-		opt(m)
+		opt(b.model)
 	}
 
-	return m
+	return b.Build()
 }
 
 // Init satisfies tea.Model.
@@ -97,12 +93,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.value {
 			return m, func() tea.Msg {
-				return OnMsg{}
+				return OnMsg{Source: m}
 			}
 		}
 
 		return m, func() tea.Msg {
-			return OffMsg{}
+			return OffMsg{Source: m}
 		}
 	}
 

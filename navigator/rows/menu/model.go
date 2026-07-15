@@ -57,16 +57,11 @@ func (m *Model[T]) Init() tea.Cmd {
 	return nil
 }
 
-// Update forwards key messages to the owning [Controller]. All other messages
-// are ignored.
-func (m *Model[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.controller == nil || m.Disabled() {
-		return m, nil
-	}
-
-	cmd := m.controller.Update(msg)
-
-	return m, cmd
+// Update ignores key messages. The owning [Controller] is registered with the
+// navigator and handles activation keys globally, while rows only track focus
+// and view state.
+func (m *Model[T]) Update(_ tea.Msg) (tea.Model, tea.Cmd) {
+	return m, nil
 }
 
 // View renders the row's cursor indicator, mark, name, and description.

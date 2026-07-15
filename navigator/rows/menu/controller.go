@@ -83,6 +83,16 @@ func (c *Controller[T]) Rows() []*Model[T] {
 	return c.rows
 }
 
+// Items returns the rows in the controller as tea models.
+func (c *Controller[T]) Items() []tea.Model {
+	items := make([]tea.Model, len(c.rows))
+	for i, r := range c.rows {
+		items[i] = r
+	}
+
+	return items
+}
+
 // FocusedIndex returns the index of the row that currently has focus, or -1 if
 // none of the controller's rows are focused.
 func (c *Controller[T]) FocusedIndex() int {

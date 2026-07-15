@@ -203,13 +203,12 @@ func TestViewportController_View_ReappliesOffsetAfterContentChange(t *testing.T)
 	// Content before opening: 0 header, 1 spacer, 2 select inline = 3 lines.
 	// Picker adds 6 lines, total becomes 9. Committed option "e" is at picker
 	// index 4, so the outer cursor line is 2 + 1 + 4 = 7.
-	nav := navigator.New(
-		testLabel("header"),
-		testLabel("spacer"),
-		selectRow,
-	)
+	nav := navigator.NewBuilder().
+		WithItems(testLabel("header"), testLabel("spacer"), selectRow).
+		WithControllerItems(selectRow.Controller()).
+		WithHeight(3).
+		Build()
 
-	nav.ViewportController().SetHeight(3)
 	vp := viewport.New()
 	nav.ViewportController().SetViewport(&vp)
 	_ = nav.FocusFirst()
@@ -219,10 +218,12 @@ func TestViewportController_View_ReappliesOffsetAfterContentChange(t *testing.T)
 	sendKey(t, nav, "down")
 	require.Equal(t, 2, nav.FocusedIndex())
 
-	// Open the picker.
-	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	// Open the picker and process the resulting LockFocusMsg.
+	_, cmd := nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	require.NotNil(t, cmd)
 
-	require.True(t, selectRow.Focused())
+	_, _ = nav.Update(cmd())
+
 	require.Greater(t, nav.CursorLine(), 2)
 
 	// Force View() to sync content and re-apply the offset.

@@ -10,7 +10,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/gzigzigzeo/bubbles/navigator"
 	"github.com/gzigzigzeo/bubbles/navigator/row"
 )
 
@@ -71,69 +70,19 @@ type Model[T comparable] struct {
 	options    []Option[T]
 	committed  T
 	pickerOpen bool
-	picker     *navigator.Model
+	controller *Controller[T]
 	validator  func(T) error
-}
-
-// pickerRow is a single focusable row inside the inline dropdown. It carries no
-// activation message; selectfield handles the commit key itself.
-type pickerRow[T comparable] struct {
-	row.FocusedState
-
-	label  string
-	styles Styles
-}
-
-// Init satisfies [tea.Model].
-func (r *pickerRow[T]) Init() tea.Cmd {
-	return nil
-}
-
-// Update satisfies [tea.Model]. The picker navigator handles navigation keys,
-// so the row does not need to interpret keys itself.
-func (r *pickerRow[T]) Update(_ tea.Msg) (tea.Model, tea.Cmd) {
-	return r, nil
-}
-
-// View renders the cursor indicator and the option label.
-func (r *pickerRow[T]) View() tea.View {
-	variant := r.styles.Blurred.Picker
-	cursor := lipgloss.NewStyle().Width(lipgloss.Width(variant.Cursor.Render())).Render("")
-
-	if r.Focused() {
-		variant = r.styles.Focused.Picker
-		cursor = variant.Cursor.Render()
-	}
-
-	line := lipgloss.JoinHorizontal(lipgloss.Top, cursor, variant.Item.Render(r.label))
-
-	return tea.NewView(line)
 }
 
 // New creates a select field with the given options, applying opts in order.
 func New[T comparable](options []Option[T], opts ...FieldOption[T]) *Model[T] {
-	m := &Model[T]{
-		options: options,
-	}
-
-	pickerRows := make([]tea.Model, len(options))
-	for i, o := range options {
-		pickerRows[i] = &pickerRow[T]{label: o.Label}
-	}
-
-	m.picker = navigator.New(pickerRows...)
-
-	if len(options) > 0 {
-		m.committed = options[0].Value
-	}
-
-	m.SetStyles(DefaultStyles())
+	b := NewBuilder[T]().Options(options)
 
 	for _, opt := range opts {
-		opt(m)
+		opt(b.model)
 	}
 
-	return m
+	return b.Build()
 }
 
 // NewFromStrings creates a Model[string] where each string is both value and
@@ -150,14 +99,24 @@ func NewFromStrings(options []string, opts ...FieldOption[string]) *Model[string
 	return New(converted, opts...)
 }
 
+// initController creates the controller that owns the picker rows.
+func (m *Model[T]) initController() {
+	m.controller = newController(m, m.options)
+}
+
+// Controller returns the select field's picker controller. The controller
+// should be registered with the outer navigator via
+// [navigator.Builder.WithControllerItems].
+func (m *Model[T]) Controller() *Controller[T] {
+	return m.controller
+}
+
 // SetStyles replaces the current styles and pushes them into the picker rows.
 func (m *Model[T]) SetStyles(styles Styles) {
 	m.StatefulStyles.SetStyles(styles)
 
-	for _, r := range m.picker.Items() {
-		if pr, ok := r.(*pickerRow[T]); ok {
-			pr.styles = styles
-		}
+	if m.controller != nil {
+		m.controller.SetStyles(styles)
 	}
 }
 
@@ -189,63 +148,42 @@ func (m *Model[T]) Validate() error {
 	return err
 }
 
-// Init initializes the picker.
+// Init satisfies [tea.Model].
 func (m *Model[T]) Init() tea.Cmd {
-	return m.picker.Init()
+	return nil
 }
 
-// Update handles opening the picker, navigating it, committing a value, and
-// cancelling.
+// Update handles opening and cancelling the picker. Navigation, commit, and
+// cancel while the picker is open are handled by the picker rows and the
+// controller.
 func (m *Model[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if m.Disabled() {
-			return m, nil
+	if m.Disabled() {
+		return m, nil
+	}
+
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	if m.pickerOpen {
+		if key.Matches(km, keyEscape) {
+			return m, m.controller.Close(false, *new(T))
 		}
 
-		if m.pickerOpen {
-			return m.updatePicker(msg)
-		}
+		// While the picker is opening the header row may still hold focus for a
+		// single update. Consume navigation and selection keys so they do not
+		// leave the picker region before the lock takes effect.
+		return m, nil
+	}
 
-		if m.Focused() && key.Matches(msg, keyOpen) {
-			m.openPicker()
-		}
+	if m.Focused() && key.Matches(km, keyOpen) {
+		m.pickerOpen = true
+
+		return m, m.controller.Open(m.committed)
 	}
 
 	return m, nil
-}
-
-// openPicker enters picker mode, placing the cursor on the committed item.
-func (m *Model[T]) openPicker() {
-	m.pickerOpen = true
-	m.picker.FocusFirst()
-
-	if idx := m.indexOf(m.committed); idx >= 0 {
-		m.picker.FocusIndex(idx)
-	}
-}
-
-// updatePicker handles key input while the picker is open.
-func (m *Model[T]) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keyEscape):
-		m.pickerOpen = false
-
-		return m, nil
-	case key.Matches(msg, keySelect):
-		if idx := m.picker.FocusedIndex(); idx >= 0 {
-			m.committed = m.options[idx].Value
-			_ = m.Validate()
-		}
-		m.pickerOpen = false
-
-		return m, nil
-	}
-
-	updated, cmd := m.picker.Update(msg)
-	m.picker = updated.(*navigator.Model)
-
-	return m, cmd
 }
 
 // indexOf returns the index of the option whose Value equals value, or -1 if
@@ -260,16 +198,10 @@ func (m *Model[T]) indexOf(value T) int {
 	return -1
 }
 
-// View renders the inline collapsed value when the picker is closed, or the
-// inline value followed by the dropdown rows when open.
+// View renders the inline label and current selection. The picker option rows
+// are rendered by the outer navigator as separate items.
 func (m *Model[T]) View() tea.View {
-	if !m.pickerOpen {
-		return tea.NewView(m.inlineView())
-	}
-
-	picker := m.picker.View().Content
-
-	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.inlineView(), picker))
+	return tea.NewView(m.inlineView())
 }
 
 // inlineView renders the label and current selection with arrow brackets when
@@ -289,7 +221,7 @@ func (m *Model[T]) inlineView() string {
 		return lipgloss.JoinHorizontal(lipgloss.Top, label, value)
 	}
 
-	if m.Focused() {
+	if m.Focused() || m.pickerOpen {
 		arrows := lipgloss.JoinHorizontal(lipgloss.Top, styles.ArrowLeft.Render(), value, styles.ArrowRight.Render())
 
 		return lipgloss.JoinHorizontal(lipgloss.Top, label, arrows)
@@ -310,36 +242,4 @@ func (m *Model[T]) committedLabel() string {
 	}
 
 	return ""
-}
-
-// CursorLine returns the line within View() holding the highlighted picker row,
-// or 0 when the picker is closed. Implements [row.CursorAware].
-func (m *Model[T]) CursorLine() int {
-	if !m.pickerOpen {
-		return 0
-	}
-
-	return 1 + m.picker.CursorLine()
-}
-
-// IsAtFirstFocusable reports whether the picker is closed, so the outer
-// navigator can move focus up. Implements [row.BoundaryAware].
-func (m *Model[T]) IsAtFirstFocusable() bool {
-	return !m.pickerOpen
-}
-
-// IsAtLastFocusable reports whether the picker is closed, so the outer
-// navigator can move focus down. Implements [row.BoundaryAware].
-func (m *Model[T]) IsAtLastFocusable() bool {
-	return !m.pickerOpen
-}
-
-// FocusFirst focuses the closed row. Implements [row.FocusReceiver].
-func (m *Model[T]) FocusFirst() tea.Cmd {
-	return m.Focus()
-}
-
-// FocusLast focuses the closed row. Implements [row.FocusReceiver].
-func (m *Model[T]) FocusLast() tea.Cmd {
-	return m.Focus()
 }

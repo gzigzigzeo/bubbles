@@ -33,8 +33,9 @@ var keyDownBinding = key.NewBinding(
 // [ViewportController] to keep the focused row visible. The zero value is not
 // usable; use [New].
 type Model struct {
-	ctrl  *focus.Controller
-	coord *ViewportController // always non-nil after construction
+	ctrl        *focus.Controller
+	coord       *ViewportController // always non-nil after construction
+	controllers []Controller
 }
 
 // New creates a Navigator over rows. Focus does not wrap at boundaries by
@@ -46,8 +47,9 @@ func New(rows ...tea.Model) *Model {
 	ctrl.SetNextKeys("down", "j")
 
 	nav := &Model{
-		ctrl:  ctrl,
-		coord: nil,
+		ctrl:        ctrl,
+		coord:       nil,
+		controllers: nil,
 	}
 	nav.coord = NewViewportController(nav)
 
@@ -83,6 +85,16 @@ func (n *Model) FocusLast() tea.Cmd {
 	return cmd
 }
 
+// LockFocus restricts focus movement to the inclusive index range [start, end].
+func (n *Model) LockFocus(start, end int) {
+	n.ctrl.Lock(start, end)
+}
+
+// UnlockFocus removes any active focus movement restriction.
+func (n *Model) UnlockFocus() {
+	n.ctrl.Unlock()
+}
+
 // FocusIndex focuses the row at idx if it is focusable and scrolls it into
 // view.
 func (n *Model) FocusIndex(idx int) tea.Cmd {
@@ -112,16 +124,44 @@ func (n *Model) Init() tea.Cmd {
 	return n.ctrl.Init()
 }
 
+// LockFocusMsg asks the navigator to restrict focus movement to a range of
+// rows and optionally focus one of them.
+type LockFocusMsg struct {
+	Range []tea.Model
+	Focus tea.Model
+}
+
+// UnlockFocusMsg asks the navigator to remove any active focus lock and
+// optionally focus a specific row.
+type UnlockFocusMsg struct {
+	Focus tea.Model
+}
+
 // Update handles keyboard navigation and routes other messages to the focused
 // row. Up/Down (and vi aliases k/j) move focus between rows. When the focused
 // row is a [row.FocusReceiver] (a nested Navigator), keys are passed through it;
 // if it defocuses itself the outer Navigator shifts focus in the same cycle.
 // The internal [ViewportController] is updated automatically so the focused
 // row stays visible.
+//
+// Registered controllers are also updated on every message so they can react to
+// row-emitted messages such as toggle state changes.
 func (n *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case LockFocusMsg:
+		return n, n.lockFocus(msg)
+	case UnlockFocusMsg:
+		return n, n.unlockFocus(msg)
+	}
+
+	cmds := make([]tea.Cmd, 0, len(n.controllers)+1)
+
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return n, n.ctrl.Update(msg)
+		cmds = append(cmds, n.ctrl.Update(msg))
+		cmds = append(cmds, n.updateControllers(msg)...)
+
+		return n, tea.Batch(cmds...)
 	}
 
 	if n.ctrl.Focused() {
@@ -130,7 +170,10 @@ func (n *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := n.updateFocusedReceiver(keyMsg)
 			n.scrollAfterMove(oldCursor, n.navigationDir(keyMsg))
 
-			return n, cmd
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, n.updateControllers(keyMsg)...)
+
+			return n, tea.Batch(cmds...)
 		}
 	}
 
@@ -139,7 +182,86 @@ func (n *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := n.ctrl.Update(keyMsg)
 	n.scrollAfterMove(oldCursor, dir)
 
-	return n, cmd
+	cmds = append(cmds, cmd)
+	cmds = append(cmds, n.updateControllers(keyMsg)...)
+
+	return n, tea.Batch(cmds...)
+}
+
+// lockFocus restricts movement to the indices covered by msg.Range and focuses
+// msg.Focus when it is found in the navigator's items.
+func (n *Model) lockFocus(msg LockFocusMsg) tea.Cmd {
+	start, end := n.indicesRange(msg.Range)
+	if start >= 0 && end >= 0 {
+		n.ctrl.Lock(start, end)
+	}
+
+	return n.focusModel(msg.Focus)
+}
+
+// unlockFocus removes the active focus lock and focuses msg.Focus when it is
+// found in the navigator's items.
+func (n *Model) unlockFocus(msg UnlockFocusMsg) tea.Cmd {
+	n.ctrl.Unlock()
+
+	return n.focusModel(msg.Focus)
+}
+
+// focusModel returns a command that focuses the given model if it exists in
+// the navigator's items.
+func (n *Model) focusModel(m tea.Model) tea.Cmd {
+	if m == nil {
+		return nil
+	}
+
+	for i, it := range n.ctrl.Items() {
+		if it == m {
+			return n.FocusIndex(i)
+		}
+	}
+
+	return nil
+}
+
+// indicesRange returns the minimum and maximum indices of the given models in
+// the navigator's items, or -1, -1 if none are found.
+func (n *Model) indicesRange(models []tea.Model) (int, int) {
+	start := -1
+	end := -1
+
+	for i, it := range n.ctrl.Items() {
+		for _, m := range models {
+			if it == m {
+				if start < 0 || i < start {
+					start = i
+				}
+
+				if end < 0 || i > end {
+					end = i
+				}
+			}
+		}
+	}
+
+	return start, end
+}
+
+// updateControllers calls Update on every registered controller and returns
+// the resulting commands.
+func (n *Model) updateControllers(msg tea.Msg) []tea.Cmd {
+	cmds := make([]tea.Cmd, 0, len(n.controllers))
+
+	for _, c := range n.controllers {
+		if c == nil {
+			continue
+		}
+
+		if cmd := c.Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	return cmds
 }
 
 // FocusedIndex returns the index of the currently focused row, or -1 if none

@@ -28,9 +28,9 @@ type Styles = row.StateSet[SelectStyles]
 
 // DefaultStyles returns a minimal, functional style set.
 func DefaultStyles() Styles {
-	neon := lipgloss.NewStyle().Foreground(lipgloss.Color("#53d1ff"))
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#d3d3d9"))
-	pale := lipgloss.NewStyle().Foreground(lipgloss.Color("#5C5C5C"))
+	neon := lipgloss.NewStyle().Foreground(row.ColorAccent)
+	dim := lipgloss.NewStyle().Foreground(row.ColorDim)
+	pale := lipgloss.NewStyle().Foreground(row.ColorPale)
 	picker := PickerStyles{
 		Cursor: lipgloss.NewStyle().SetString("▶ "),
 		Item:   lipgloss.NewStyle(),
@@ -38,25 +38,25 @@ func DefaultStyles() Styles {
 
 	return Styles{
 		Focused: SelectStyles{
-			Label:      lipgloss.NewStyle().Bold(true).MarginRight(1),
+			Label:      row.DefaultLabelStyle().Bold(true),
 			Value:      dim,
 			ArrowLeft:  neon.SetString("  ◀ "),
 			ArrowRight: neon.SetString("  ▶"),
-			Error:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F5F")).MarginRight(1),
+			Error:      lipgloss.NewStyle().Bold(true).Foreground(row.ColorError).MarginRight(1),
 			Picker:     picker,
 		},
 		Blurred: SelectStyles{
-			Label:      lipgloss.NewStyle().MarginRight(1),
+			Label:      row.DefaultLabelStyle(),
 			Value:      dim.PaddingLeft(4),
 			ArrowRight: lipgloss.NewStyle(),
-			Error:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F5F")).MarginRight(1),
+			Error:      lipgloss.NewStyle().Bold(true).Foreground(row.ColorError).MarginRight(1),
 			Picker:     picker,
 		},
 		Disabled: SelectStyles{
-			Label:      lipgloss.NewStyle().Faint(true).MarginRight(1),
+			Label:      row.DefaultLabelStyle().Faint(true),
 			Value:      pale,
 			ArrowRight: lipgloss.NewStyle(),
-			Error:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F5F")).MarginRight(1),
+			Error:      lipgloss.NewStyle().Bold(true).Foreground(row.ColorError).MarginRight(1),
 			Picker:     picker,
 		},
 	}

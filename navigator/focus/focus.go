@@ -13,11 +13,14 @@ import (
 
 // Controller manages an ordered list of items and which one holds focus.
 type Controller struct {
-	items   []tea.Model
-	focused int
-	wrap    bool
-	nextKey key.Binding
-	prevKey key.Binding
+	items     []tea.Model
+	focused   int
+	wrap      bool
+	nextKey   key.Binding
+	prevKey   key.Binding
+	locked    bool
+	lockStart int
+	lockEnd   int
 }
 
 const initialCmdCapacity = 2
@@ -48,6 +51,24 @@ func (c *Controller) SetNextKeys(keys ...string) {
 // item.
 func (c *Controller) SetPrevKeys(keys ...string) {
 	c.prevKey = key.NewBinding(key.WithKeys(keys...), key.WithHelp(keys[0], "prev"))
+}
+
+// Lock restricts focus movement to the inclusive index range [start, end].
+// Existing focus outside the range is left unchanged until the next move.
+func (c *Controller) Lock(start, end int) {
+	c.locked = true
+	c.lockStart = start
+	c.lockEnd = end
+}
+
+// Unlock removes the focus movement restriction.
+func (c *Controller) Unlock() {
+	c.locked = false
+}
+
+// Locked reports whether focus movement is currently restricted.
+func (c *Controller) Locked() bool {
+	return c.locked
 }
 
 // Init initializes all items.
@@ -250,6 +271,16 @@ func (c *Controller) focusCmdForItem(idx int, dir int) tea.Cmd {
 	return focusable.Focus()
 }
 
+// inLock reports whether idx is inside the active lock range. When no lock is
+// active every index is considered inside.
+func (c *Controller) inLock(idx int) bool {
+	if !c.locked {
+		return true
+	}
+
+	return idx >= c.lockStart && idx <= c.lockEnd
+}
+
 // isFocusable reports whether the item at idx can receive focus.
 func (c *Controller) isFocusable(idx int) bool {
 	if idx < 0 || idx >= len(c.items) {
@@ -270,11 +301,15 @@ func (c *Controller) isFocusable(idx int) bool {
 }
 
 // nextFocusable returns the first focusable index beyond from in direction dir,
-// or -1 if none exists.
+// or -1 if none exists. When locked, movement stops at the lock boundaries.
 func (c *Controller) nextFocusable(from, dir int) int {
 	pos := from + dir
 
 	for pos >= 0 && pos < len(c.items) {
+		if !c.inLock(pos) {
+			return -1
+		}
+
 		if c.isFocusable(pos) {
 			return pos
 		}
@@ -285,10 +320,11 @@ func (c *Controller) nextFocusable(from, dir int) int {
 	return -1
 }
 
-// firstFocusable returns the index of the first focusable item, or -1.
+// firstFocusable returns the index of the first focusable item, or -1. When
+// locked, only items inside the lock range are considered.
 func (c *Controller) firstFocusable() int {
 	for i := range c.items {
-		if c.isFocusable(i) {
+		if c.isFocusable(i) && c.inLock(i) {
 			return i
 		}
 	}
@@ -296,10 +332,11 @@ func (c *Controller) firstFocusable() int {
 	return -1
 }
 
-// lastFocusable returns the index of the last focusable item, or -1.
+// lastFocusable returns the index of the last focusable item, or -1. When
+// locked, only items inside the lock range are considered.
 func (c *Controller) lastFocusable() int {
 	for i := len(c.items) - 1; i >= 0; i-- {
-		if c.isFocusable(i) {
+		if c.isFocusable(i) && c.inLock(i) {
 			return i
 		}
 	}

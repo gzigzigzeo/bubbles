@@ -20,7 +20,7 @@ type Styles = row.StateSet[TextInputStyles]
 // DefaultStyles returns usable Styles with no external theme dependency.
 func DefaultStyles() Styles {
 	base := textinput.DefaultStyles(true)
-	pale := lipgloss.NewStyle().Foreground(lipgloss.Color("#5C5C5C"))
+	pale := lipgloss.NewStyle().Foreground(row.ColorPale)
 
 	disabled := base
 	disabled.Focused.Text = pale
@@ -28,19 +28,19 @@ func DefaultStyles() Styles {
 
 	return Styles{
 		Focused: TextInputStyles{
-			Label: lipgloss.NewStyle().Bold(true).MarginRight(1),
+			Label: row.DefaultLabelStyle().Bold(true),
 			Input: base,
-			Error: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F5F")).MarginRight(1),
+			Error: lipgloss.NewStyle().Bold(true).Foreground(row.ColorError).MarginRight(1),
 		},
 		Blurred: TextInputStyles{
-			Label: lipgloss.NewStyle().MarginRight(1),
+			Label: row.DefaultLabelStyle(),
 			Input: base,
-			Error: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F5F")).MarginRight(1),
+			Error: lipgloss.NewStyle().Bold(true).Foreground(row.ColorError).MarginRight(1),
 		},
 		Disabled: TextInputStyles{
-			Label: lipgloss.NewStyle().Faint(true).MarginRight(1),
+			Label: row.DefaultLabelStyle().Faint(true),
 			Input: disabled,
-			Error: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F5F")).MarginRight(1),
+			Error: lipgloss.NewStyle().Bold(true).Foreground(row.ColorError).MarginRight(1),
 		},
 	}
 }

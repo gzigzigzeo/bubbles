@@ -19,26 +19,26 @@ type Styles = row.StateSet[ToggleStyles]
 // DefaultStyles returns usable Styles with no external theme dependency,
 // rendering onMsg when on and offMsg when off.
 func DefaultStyles(onMsg, offMsg string) Styles {
-	neon := lipgloss.NewStyle().Foreground(lipgloss.Color("#53d1ff"))
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#d3d3d9"))
-	pale := lipgloss.NewStyle().Foreground(lipgloss.Color("#5C5C5C"))
+	neon := lipgloss.NewStyle().Foreground(row.ColorAccent)
+	dim := lipgloss.NewStyle().Foreground(row.ColorDim)
+	pale := lipgloss.NewStyle().Foreground(row.ColorPale)
 
 	onMsg = "● " + onMsg
 	offMsg = "○ " + offMsg
 
 	return Styles{
 		Focused: ToggleStyles{
-			Label: lipgloss.NewStyle().Bold(true).MarginRight(1),
+			Label: row.DefaultLabelStyle().Bold(true),
 			On:    neon.SetString(onMsg),
 			Off:   dim.SetString(offMsg),
 		},
 		Blurred: ToggleStyles{
-			Label: lipgloss.NewStyle().MarginRight(1),
+			Label: row.DefaultLabelStyle(),
 			On:    dim.SetString(onMsg),
 			Off:   dim.SetString(offMsg),
 		},
 		Disabled: ToggleStyles{
-			Label: lipgloss.NewStyle().Faint(true).MarginRight(1),
+			Label: row.DefaultLabelStyle().Faint(true),
 			On:    pale.SetString(onMsg),
 			Off:   pale.SetString(offMsg),
 		},

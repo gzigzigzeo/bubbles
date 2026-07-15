@@ -85,17 +85,13 @@ type Model struct {
 
 // New creates a text input row, applying opts in order.
 func New(opts ...Option) *Model {
-	input := textinput.New()
-	input.Prompt = ""
-
-	m := &Model{input: input}
-	m.SetStyles(DefaultStyles())
+	b := NewBuilder()
 
 	for _, opt := range opts {
-		opt(m)
+		opt(b.model)
 	}
 
-	return m
+	return b.Build()
 }
 
 // syncInputStyles pushes the active state variant into the underlying input.

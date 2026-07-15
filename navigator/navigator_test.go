@@ -460,12 +460,11 @@ func TestSelectField_OpenPicker_ScrollsSelectedIntoView(t *testing.T) {
 	selectRow := selectfield.NewFromStrings([]string{"a", "b", "c", "d", "e", "f"})
 	selectRow.Set("e")
 
-	nav := navigator.New(
-		testLabel("header"),
-		testLabel("spacer"),
-		selectRow,
-	)
-	nav.ViewportController().SetHeight(3)
+	nav := navigator.NewBuilder().
+		WithItems(testLabel("header"), testLabel("spacer"), selectRow).
+		WithControllerItems(selectRow.Controller()).
+		WithHeight(3).
+		Build()
 	_ = nav.FocusFirst()
 
 	// Move focus onto the select field (line 2).
@@ -474,16 +473,20 @@ func TestSelectField_OpenPicker_ScrollsSelectedIntoView(t *testing.T) {
 
 	require.Equal(t, 2, nav.FocusedIndex())
 
-	// Open the picker. The committed option "e" is at picker index 4, so the
-	// outer cursor line becomes 2 + 1 + 4 = 7. Total content becomes 2 + 1 + 6 = 9.
-	_, _ = nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	// Open the picker. The select field returns a LockFocusMsg command that the
+	// navigator handles in the next update.
+	_, cmd := nav.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	require.NotNil(t, cmd)
 
-	require.Greater(t, nav.CursorLine(), 2)
+	_, _ = nav.Update(cmd())
 
+	// The committed option "e" is at picker index 4, so the outer cursor line
+	// becomes 2 + 1 + 4 = 7. Total content becomes 2 + 1 + 6 = 9.
 	cursor := nav.CursorLine()
 	offset := nav.ViewportController().YOffset()
 	height := nav.ViewportController().Height()
 
+	require.Greater(t, cursor, 2)
 	require.GreaterOrEqual(t, cursor, offset)
 	require.Less(t, cursor, offset+height)
 }

@@ -46,22 +46,13 @@ func New(label string, msg tea.Msg, opts ...Option) *Model {
 		panic("button.New: msg must not be nil")
 	}
 
-	buttonModel := &Model{
-		StatefulStyles: row.StatefulStyles[lipgloss.Style]{},
-		FocusedState:   row.FocusedState{},
-		DisabledState:  row.DisabledState{},
-		LabelState:     row.LabelState{},
-		msg:            msg,
-		pressKey:       defaultPressKey,
-	}
-	buttonModel.SetLabel(label)
-	buttonModel.SetStyles(DefaultStyles())
+	b := NewBuilder().Label(label).Msg(msg)
 
 	for _, opt := range opts {
-		opt(buttonModel)
+		opt(b.model)
 	}
 
-	return buttonModel
+	return b.Build()
 }
 
 // Init satisfies [tea.Model].

@@ -1,5 +1,28 @@
 package row
 
+import "charm.land/lipgloss/v2"
+
+// Shared colors used by default row styles.
+var (
+	ColorAccent = lipgloss.Color("#53d1ff")
+	ColorDim    = lipgloss.Color("#d3d3d9")
+	ColorPale   = lipgloss.Color("#5C5C5C")
+	ColorError  = lipgloss.Color("#FF5F5F")
+)
+
+// DefaultLabelWidth is the default width applied to row labels so values from
+// adjacent rows line up vertically.
+const DefaultLabelWidth = 15
+
+// DefaultLabelStyle returns a base style for row labels with a fixed width,
+// right alignment, and a small right margin.
+func DefaultLabelStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Width(DefaultLabelWidth).
+		Align(lipgloss.Right).
+		MarginRight(1)
+}
+
 // StateSet holds a Focused, Blurred, and Disabled variant of some style bundle.
 type StateSet[T any] struct {
 	Focused  T

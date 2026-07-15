@@ -89,6 +89,25 @@ func TestDisableController_Update_controlsMultipleTargets(t *testing.T) {
 	require.True(t, b.Disabled())
 }
 
+func TestDisableController_WithSource_ignoresOtherToggles(t *testing.T) {
+	source := toggle.New("Source")
+	other := toggle.New("Other")
+	target := &fakeTarget{}
+	ctrl := toggle.NewDisableControllerFor(source, target)
+
+	_ = ctrl.Update(toggle.OnMsg{Source: source})
+
+	require.True(t, target.Disabled())
+
+	_ = ctrl.Update(toggle.OffMsg{Source: other})
+
+	require.True(t, target.Disabled())
+
+	_ = ctrl.Update(toggle.OffMsg{Source: source})
+
+	require.False(t, target.Disabled())
+}
+
 func TestModel_Update_emitsOnMsgWhenToggledOn(t *testing.T) {
 	m := toggle.New("Notifications")
 	_ = m.Focus()

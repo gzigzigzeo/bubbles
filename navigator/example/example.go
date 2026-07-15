@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/gzigzigzeo/bubbles/navigator"
+	"github.com/gzigzigzeo/bubbles/navigator/row"
 	"github.com/gzigzigzeo/bubbles/navigator/rows/button"
 	"github.com/gzigzigzeo/bubbles/navigator/rows/menu"
 	"github.com/gzigzigzeo/bubbles/navigator/rows/selectfield"
@@ -102,115 +103,109 @@ type model struct {
 func newModel() *model {
 	sectionStyle := lipgloss.NewStyle().Faint(true)
 
-	menuRows := []*menu.Model[string]{
-		menu.New("Alpha", "alpha", "First option", selectMsg{Value: "alpha"}),
-		menu.New("Beta", "beta", "Second option", selectMsg{Value: "beta"}),
-		menu.New("Gamma", "gamma", "Third option", selectMsg{Value: "gamma"}),
-		menu.New("Delta", "delta", "Fourth option", selectMsg{Value: "delta"}),
-		menu.New("Epsilon", "epsilon", "Last option", selectMsg{Value: "epsilon"}),
-	}
-	_ = menu.NewController(menuRows, menu.WithMode[string](menu.ModeMultiSelect))
+	menuCtrl := menu.NewControllerBuilder[string]().
+		Mode(menu.ModeMultiSelect).
+		Add("Alpha", "alpha", "First option", selectMsg{Value: "alpha"}).
+		Add("Beta", "beta", "Second option", selectMsg{Value: "beta"}).
+		Add("Gamma", "gamma", "Third option", selectMsg{Value: "gamma"}).
+		Add("Delta", "delta", "Fourth option", selectMsg{Value: "delta"}).
+		Add("Epsilon", "epsilon", "Last option", selectMsg{Value: "epsilon"}).
+		Build()
+
+	menuRows := menuCtrl.Rows()
 
 	textRows := []*textinput.Model{
-		textinput.New(
-			textinput.WithLabel("Name"),
-			textinput.WithPlaceholder("Ada Lovelace"),
-			textinput.WithWidth(30),
-		),
-		textinput.New(
-			textinput.WithLabel("Email"),
-			textinput.WithPlaceholder("ada@example.com"),
-			textinput.WithWidth(30),
-			textinput.WithValidator(func(value string) error {
+		textinput.NewBuilder().
+			Label("Name").
+			Placeholder("Ada Lovelace").
+			Width(30).
+			Build(),
+		textinput.NewBuilder().
+			Label("Email").
+			Placeholder("ada@example.com").
+			Width(30).
+			Validator(func(value string) error {
 				if !strings.Contains(value, "@") {
 					return fmt.Errorf("Email must contain @")
 				}
 
 				return nil
-			}),
-		),
+			}).
+			Build(),
 	}
 
-	ageRow := textinput.New(
-		textinput.WithLabel("Age"),
-		textinput.WithPlaceholder("30"),
-		textinput.WithWidth(10),
-		textinput.WithFilter(textinput.NumberFilter),
-		textinput.WithValidator(func(value string) error {
+	ageRow := textinput.NewBuilder().
+		Label("Age").
+		Placeholder("30").
+		Width(10).
+		Filter(textinput.NumberFilter).
+		Validator(func(value string) error {
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 18 {
 				return fmt.Errorf("Must be at least 18")
 			}
 
 			return nil
-		}),
-	)
+		}).
+		Build()
 
 	toggleRows := []*toggle.Model{
-		toggle.New("Notifications"),
-		toggle.New("Dark mode", toggle.WithValue(true)),
-		toggle.New("Auto-save"),
+		toggle.NewBuilder().Label("Notifications").Build(),
+		toggle.NewBuilder().Label("Dark mode").Value(true).Build(),
+		toggle.NewBuilder().Label("Auto-save").Build(),
 	}
 
-	selectRow := selectfield.New([]selectfield.Option[string]{
-		{Value: "go", Label: "Go"},
-		{Value: "rust", Label: "Rust"},
-		{Value: "ts", Label: "TypeScript"},
-		{Value: "zig", Label: "Zig"},
-	},
-		selectfield.WithLabel[string]("Language"),
-		selectfield.WithValidator[string](func(value string) error {
+	selectRow := selectfield.NewBuilder[string]().
+		Label("Language").
+		Options([]selectfield.Option[string]{
+			{Value: "go", Label: "Go"},
+			{Value: "rust", Label: "Rust"},
+			{Value: "ts", Label: "TypeScript"},
+			{Value: "zig", Label: "Zig"},
+		}).
+		Validator(func(value string) error {
 			if value == "zig" {
 				return fmt.Errorf("Zig is not allowed")
 			}
 
 			return nil
-		}),
-	)
+		}).
+		Build()
 
-	buttonStack := button.NewStack(
-		button.New("Save", pressMsg{Label: "Save"}),
-		button.New("Cancel", pressMsg{Label: "Cancel"}),
-		button.New("Help", pressMsg{Label: "Help"}),
-	)
-	buttonStack.SetStyles(button.StackStyles{
-		Wrapper: lipgloss.NewStyle().MarginTop(1),
-	})
-
-	teaRows := make([]tea.Model, 0,
-		1+len(menuRows)+1+len(textRows)+1+1+1+len(toggleRows)+2,
-	)
-
-	teaRows = append(teaRows, newLabel("─ Menu ─", sectionStyle))
-	for _, r := range menuRows {
-		teaRows = append(teaRows, r)
-	}
-
-	teaRows = append(teaRows, newLabel("─ Text ─", sectionStyle))
-	for _, r := range textRows {
-		teaRows = append(teaRows, r)
-	}
-
-	teaRows = append(teaRows, newLabel("─ Number ─", sectionStyle))
-	teaRows = append(teaRows, ageRow)
-
-	teaRows = append(teaRows, newLabel("─ Toggles ─", sectionStyle))
-	for _, r := range toggleRows {
-		teaRows = append(teaRows, r)
-	}
-
-	teaRows = append(teaRows, newLabel("─ Select ─", sectionStyle))
-	teaRows = append(teaRows, selectRow)
-
-	teaRows = append(teaRows, buttonStack)
-
-	outer := navigator.New(teaRows...)
+	buttonStack := button.NewStackBuilder().
+		Add(
+			button.NewBuilder().Label("Save").Msg(pressMsg{Label: "Save"}).Build(),
+			button.NewBuilder().Label("Cancel").Msg(pressMsg{Label: "Cancel"}).Build(),
+			button.NewBuilder().Label("Help").Msg(pressMsg{Label: "Help"}).Build(),
+		).
+		WrapperStyle(lipgloss.NewStyle().MarginTop(1)).
+		Build()
 
 	viewport := scrollview.New()
 	viewport.SetWidth(defaultWidth)
 
-	outer.ViewportController().SetHeight(defaultHeight)
-	outer.ViewportController().SetViewport(viewport)
+	outer := navigator.NewBuilder().
+		WithItems(newLabel("─ Menu ─", sectionStyle)).
+		WithControllerItems(menuCtrl).
+		WithItems(newLabel("─ Text ─", sectionStyle)).
+		WithItems(
+			tea.Model(textRows[0]),
+			tea.Model(textRows[1]),
+		).
+		WithItems(newLabel("─ Number ─", sectionStyle)).
+		WithItems(ageRow).
+		WithItems(newLabel("─ Toggles ─", sectionStyle)).
+		WithItems(
+			tea.Model(toggleRows[0]),
+			tea.Model(toggleRows[1]),
+			tea.Model(toggleRows[2]),
+		).
+		WithItems(newLabel("─ Select ─", sectionStyle)).
+		WithItems(selectRow).
+		WithItems(buttonStack).
+		WithViewport(viewport).
+		WithHeight(defaultHeight).
+		Build()
 
 	return &model{
 		nav:         outer,
@@ -219,7 +214,7 @@ func newModel() *model {
 		titleStyle:  lipgloss.NewStyle().Bold(true).MarginBottom(1),
 		hintStyle:   lipgloss.NewStyle().Faint(true).MarginTop(1),
 		cursorStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
-		statusStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#53d1ff")),
+		statusStyle: lipgloss.NewStyle().Foreground(row.ColorAccent),
 		menuRows:    menuRows,
 		textRows:    textRows,
 		ageRow:      ageRow,
@@ -300,7 +295,10 @@ func (m *model) View() tea.View {
 		)
 	}
 
-	return tea.NewView(content)
+	view := tea.NewView(content)
+	view.AltScreen = true
+
+	return view
 }
 
 // validate runs validation on every validated row and returns the first error.

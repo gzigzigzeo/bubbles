@@ -7,8 +7,9 @@ import (
 )
 
 // DisableController disables or enables a set of dependent rows when it sees
-// toggle state messages.
+// toggle state messages from its configured source toggle.
 type DisableController struct {
+	source  *Model
 	targets []row.Disableable
 	invert  bool
 }
@@ -21,6 +22,15 @@ type DisableControllerOption func(*DisableController)
 func WithInvert() DisableControllerOption {
 	return func(c *DisableController) {
 		c.invert = true
+	}
+}
+
+// WithSource binds the controller to a specific toggle. It only reacts to
+// [OnMsg] and [OffMsg] messages whose [Source] pointer matches the given
+// toggle.
+func WithSource(source *Model) DisableControllerOption {
+	return func(c *DisableController) {
+		c.source = source
 	}
 }
 
@@ -37,17 +47,36 @@ func NewDisableController(targets []row.Disableable, opts ...DisableControllerOp
 	return c
 }
 
+// NewDisableControllerFor creates a controller bound to the given source toggle.
+func NewDisableControllerFor(source *Model, targets ...row.Disableable) *DisableController {
+	return NewDisableController(targets, WithSource(source))
+}
+
 // Update reacts to toggle state messages and returns commands that disable or
 // enable the controlled targets. It ignores all other messages.
 func (c *DisableController) Update(msg tea.Msg) tea.Cmd {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case OnMsg:
-		return c.sync(true)
+		if c.matchesSource(msg.Source) {
+			return c.sync(true)
+		}
 	case OffMsg:
-		return c.sync(false)
+		if c.matchesSource(msg.Source) {
+			return c.sync(false)
+		}
 	}
 
 	return nil
+}
+
+// matchesSource reports whether the message source matches the configured
+// source. A nil source accepts any message for backward compatibility.
+func (c *DisableController) matchesSource(source *Model) bool {
+	if c.source == nil {
+		return true
+	}
+
+	return c.source == source
 }
 
 // sync returns the commands that apply the disable/enable state matching value
@@ -74,4 +103,11 @@ func (c *DisableController) sync(value bool) tea.Cmd {
 // Targets returns the rows controlled by this controller.
 func (c *DisableController) Targets() []row.Disableable {
 	return c.targets
+}
+
+// Items returns the rows controlled by this controller as tea models. It is
+// empty because the controlled targets live in the outer navigator and are
+// updated through messages.
+func (c *DisableController) Items() []tea.Model {
+	return nil
 }

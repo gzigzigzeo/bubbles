@@ -200,12 +200,12 @@ require.Equal(t, want, got)
 
 Every example must live in its own isolated Go module with its own `go.mod`. The directory must be named `example`. Examples reference packages in this repository by local path using `replace` directives, not by published version.
 
-## Row / Collection separation
+## Model / Controller separation
 
 In navigator-based components, keep rows as data sources and collections as behaviour owners.
 
-- **Row** — holds data, view state, focus/disabled state, and the message to emit when activated. It does not handle activation keys itself.
-- **Collection** — owns activation semantics: key bindings, selection mode, focused-index tracking, and message emission. Rows transparently forward keys to their collection.
+- **Model** — holds data, view state, focus/disabled state, and the message to emit when activated. It does not handle activation keys itself.
+- **Controller** — owns activation semantics: key bindings, selection mode, focused-index tracking, and message emission. Rows transparently forward keys to their collection.
 
 ```go
 // Good: row is data; collection handles Enter/Space.
